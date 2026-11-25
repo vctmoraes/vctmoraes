@@ -688,20 +688,24 @@ def battery_info():
 # --- música tocando, com capa
 
 MUSIC_AS = """tell application "Music"
+set st to (player state as text)
+if st is "stopped" then return "stopped"
 try
 set t to current track
-return (player state as text) & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round (duration of t)) as text)
-on error
-return "stopped" & tab & tab & tab & tab & "0" & tab & "0"
+return st & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round (duration of t)) as text)
+on error e
+return "error" & tab & e
 end try
 end tell"""
 
 SPOTIFY_AS = """tell application "Spotify"
+set st to (player state as text)
+if st is "stopped" then return "stopped"
 try
 set t to current track
-return (player state as text) & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round ((duration of t) / 1000)) as text) & tab & (artwork url of t)
-on error
-return "stopped" & tab & tab & tab & tab & "0" & tab & "0"
+return st & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round ((duration of t) / 1000)) as text) & tab & (artwork url of t)
+on error e
+return "error" & tab & e
 end try
 end tell"""
 
@@ -819,6 +823,8 @@ def music_fn(cfg):
     out = osa(MUSIC_AS if player == "Music" else SPOTIFY_AS, timeout=10)
     f = (out.split("\t") + [""] * 7)[:7]
     state, title, artist, album, pos, dur, arturl = f
+    if state == "error":
+        raise ActionError("O app %s não entregou a faixa: %s" % (player, title))
     if state == "stopped" or not title:
         return {"state": "stopped"}
     try:
