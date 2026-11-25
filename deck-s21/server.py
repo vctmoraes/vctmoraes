@@ -1093,6 +1093,138 @@ def find_button(cfg, button_id):
     return None
 
 
+# ------------------------------------------------------------ verificação da configuração
+
+INFO_CARDS = ("now", "sys", "claude", "cal", "music", "rem")  # igual a CARD_TITLES em web/index.html
+BG_PRESETS = ("midnight", "aurora", "sunset", "forest")        # igual a BG_PRESETS em web/index.html
+INDICATORS = ("mic_muted", "sound_muted", "music_playing")
+KEY_MODIFIERS = ("command", "shift", "option", "control")
+REQUIRED_FIELDS = {"app": ["name"], "url": ["url"], "folder": ["path"], "shortcut": ["name"],
+                   "applescript": ["script"], "shell": ["command"], "paste": ["text"], "music": ["cmd"]}
+
+
+def check_action(action):
+    """Problemas de uma ação, como lista de textos."""
+    problems = []
+    kind = action.get("type")
+    for field in REQUIRED_FIELDS.get(kind, []):
+        if not isinstance(action.get(field), str) or not action[field].strip():
+            problems.append("a ação '%s' precisa do campo '%s'" % (kind, field))
+    if kind == "url" and isinstance(action.get("url"), str) and not re.match(r"^https?://", action["url"]):
+        problems.append("a URL precisa começar com http:// ou https://")
+    if kind == "music" and action.get("cmd") not in MUSIC_CMDS:
+        problems.append("cmd da música deve ser um de: " + ", ".join(MUSIC_CMDS))
+    if kind == "mic" and action.get("mode", "toggle") not in ("toggle", "mute", "unmute"):
+        problems.append("mode do microfone deve ser toggle, mute ou unmute")
+    if kind == "volume" and not ({"set", "delta"} & set(action) or action.get("mute") == "toggle"):
+        problems.append("a ação 'volume' precisa de set, delta ou mute")
+    if kind == "keys":
+        if "code" not in action and not (isinstance(action.get("key"), str) and len(action["key"]) == 1):
+            problems.append("a ação 'keys' precisa de 'key' (uma tecla) ou 'code'")
+        mods = action.get("modifiers", [])
+        if not isinstance(mods, list) or any(m not in KEY_MODIFIERS for m in mods):
+            problems.append("modifiers aceita: " + ", ".join(KEY_MODIFIERS))
+        rep = action.get("repeat", 1)
+        if not isinstance(rep, int) or not 1 <= rep <= 16:
+            problems.append("repeat deve ser um número de 1 a 16")
+    if kind == "new_project":
+        for sub in action.get("folders", []):
+            if not isinstance(sub, str) or sub.startswith("/") or ".." in Path(sub).parts:
+                problems.append("subpasta inválida: %s" % sub)
+    return problems
+
+
+def check_config(deep=False):
+    """Confere o config.json (com o config.local.json). Retorna (erros, avisos).
+    deep=True também confere, no Mac, se os apps e os atalhos existem."""
+    errors, warns = [], []
+    try:
+        cfg = load_config()
+    except ConfigError as e:
+        return [str(e)], warns
+    if cfg.get("player", "Spotify") not in ("Spotify", "Music"):
+        errors.append("player deve ser Spotify ou Music")
+    ui = cfg.get("ui", {})
+    ranges = {"button_height": (64, 260), "button_min_width": (90, 300), "icon_size": (20, 96), "dim": (0, 0.9)}
+    for key, (lo, hi) in ranges.items():
+        if key in ui and not (isinstance(ui[key], (int, float)) and not isinstance(ui[key], bool) and lo <= ui[key] <= hi):
+            errors.append("ui.%s deve ser um número de %s a %s" % (key, lo, hi))
+    bg = ui.get("background")
+    if bg and bg not in BG_PRESETS:
+        if not FILE_NAME_RE.match(bg) or Path(bg).suffix.lower() not in BG_TYPES or not (BG_DIR / bg).is_file():
+            errors.append("ui.background '%s' não é um fundo pronto (%s) nem um arquivo da pasta backgrounds"
+                          % (bg, ", ".join(BG_PRESETS)))
+    apps, shortcuts, has_now = set(), set(), False
+    for page in cfg["pages"]:
+        pname = page.get("name", "?")
+        if not page.get("name"):
+            warns.append("uma página está sem nome")
+        if page.get("type") == "info":
+            cards = page.get("cards") or []
+            has_now = has_now or "now" in cards or not cards
+            for card in cards:
+                if card not in INFO_CARDS:
+                    errors.append("página '%s': cartão '%s' não existe (use: %s)" % (pname, card, ", ".join(INFO_CARDS)))
+            if page.get("buttons"):
+                warns.append("página '%s': páginas de informações não mostram botões" % pname)
+            continue
+        seen = set()
+        for btn in page.get("buttons", []):
+            label = btn.get("label")
+            where = "página '%s', botão '%s'" % (pname, label)
+            if not label:
+                errors.append("página '%s': um botão está sem 'label'" % pname)
+            elif label in seen:
+                warns.append("%s: nome repetido na mesma página" % where)
+            seen.add(label)
+            for problem in check_action(btn["action"]):
+                errors.append("%s: %s" % (where, problem))
+            for key in ("symbol", "symbol_on"):
+                name = btn.get(key)
+                if name and not (ICONS_DIR / (str(name) + ".svg")).is_file():
+                    warns.append("%s: ícone '%s' não existe em web/icons (o botão usa o emoji)" % (where, name))
+            if btn.get("indicator") and btn["indicator"] not in INDICATORS:
+                errors.append("%s: indicator deve ser um de: %s" % (where, ", ".join(INDICATORS)))
+            app = icon_app_name(btn)
+            if btn.get("icon_app") is not None and not app:
+                errors.append("%s: icon_app inválido" % where)
+            if app:
+                apps.add(app)
+            if btn["action"].get("type") == "shortcut" and btn["action"].get("name"):
+                shortcuts.add(btn["action"]["name"])
+    w = info_cfg(cfg, "weather")
+    if has_now and w.get("enabled", True) is not False and not (w.get("city") or (w.get("latitude") is not None and w.get("longitude") is not None)):
+        warns.append("clima sem cidade: escreva info.weather.city no config.local.json")
+    if deep and sys.platform == "darwin":
+        for app in sorted(apps):
+            if not find_app(app):
+                warns.append("app '%s' não encontrado no Mac (o botão usa o ícone de linha)" % app)
+        if shortcuts:
+            try:
+                known = set(run(["shortcuts", "list"], timeout=20).splitlines())
+                for name in sorted(shortcuts - known):
+                    warns.append("atalho '%s' não existe no app Atalhos" % name)
+            except ActionError as e:
+                warns.append("não consegui listar os atalhos: %s" % e)
+    return errors, warns
+
+
+def run_check():
+    print("Verificando config.json (e config.local.json, se existir)...\n")
+    errors, warns = check_config(deep=True)
+    for e in errors:
+        print("ERRO:  " + e)
+    for w in warns:
+        print("AVISO: " + w)
+    if not errors and not warns:
+        print("Tudo certo. Nenhum problema encontrado.")
+    else:
+        print("\n%d erro(s), %d aviso(s)." % (len(errors), len(warns)))
+    if sys.platform != "darwin":
+        print("(Fora do macOS, a verificação não confere apps nem atalhos.)")
+    return 1 if errors else 0
+
+
 # --------------------------------------------------------------------- HTTP
 
 TOKEN = ""
@@ -1315,10 +1447,15 @@ def load_token():
 
 def main():
     global TOKEN, PIN, PIN_EXPIRES
+    if "--check" in sys.argv:
+        sys.exit(run_check())
     try:
         cfg = load_config()
     except ConfigError as e:
         sys.exit(str(e))
+    errors, warns = check_config()
+    if errors or warns:
+        print("A configuração tem %d erro(s) e %d aviso(s). Veja com: python3 server.py --check\n" % (len(errors), len(warns)))
     TOKEN = load_token()
     PIN = "%06d" % secrets.randbelow(10 ** 6)
     PIN_EXPIRES = time.time() + PIN_TTL

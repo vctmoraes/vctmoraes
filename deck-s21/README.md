@@ -260,6 +260,33 @@ A página **Mac** tem botões para bloquear a tela, apagar a tela, abrir a prote
 Os botões de bloqueio, de brilho e de texto enviam teclas. Eles precisam da permissão de **Acessibilidade**.
 Se o brilho não mudar, o código da tecla pode ser diferente no seu Mac. Me avise.
 
+## Verificação e testes
+
+### Conferir a configuração
+
+Depois de editar o `config.json` ou o `config.local.json`, rode:
+
+```bash
+python3 server.py --check
+```
+
+O comando mostra cada problema com a página e o botão. Exemplos: tipo de ação errado, ícone que não existe, fundo que não existe.
+No Mac, ele também avisa quando um app ou um atalho do app Atalhos não existe.
+O servidor também mostra um resumo dos problemas quando inicia.
+
+### Teste automático (para quem mexe no código)
+
+```bash
+python3 tests/smoke.py
+```
+
+O teste cria comandos falsos do macOS e sobe o servidor. Ele confere as rotas, o pareamento, os cartões de informação, os ícones e executa todos os botões.
+Funciona em qualquer sistema. Ele **não** prova que o AppleScript compila no Mac, nem as permissões do macOS. Só o Mac confirma esses pontos.
+
+### Skill para o Claude
+
+A pasta `.claude/skills/deck-s21` na raiz do repositório guarda as regras e as armadilhas do projeto. O Claude Code carrega essa skill ao trabalhar neste repositório.
+
 ## Segurança
 
 - O servidor aceita pedidos só de aparelhos pareados. O pareamento usa o código de 6 dígitos.
