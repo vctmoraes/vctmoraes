@@ -393,11 +393,10 @@ def make_icon(name):
     raise ActionError("; ".join(errors))
 
 
-def get_icon(cfg, button_id):
-    """Retorna o caminho do PNG do ícone, ou None."""
-    btn = find_button(cfg, button_id)
-    name = icon_app_name(btn) if btn else None
-    if not name:
+def get_icon(cfg, name):
+    """Retorna o caminho do PNG do ícone de um app da configuração, ou None."""
+    allowed = {icon_app_name(b) for page in cfg["pages"] for b in page.get("buttons", [])}
+    if name not in allowed:
         return None
     with _icon_lock:
         failed = _icon_fail.get(name)
@@ -860,8 +859,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(500, {"error": str(e)})
             return
         if path == "/api/icon":
-            ids = parse_qs(urlparse(self.path).query).get("id", [""])
-            icon = get_icon(cfg, ids[0])
+            names = parse_qs(urlparse(self.path).query).get("app", [""])
+            icon = get_icon(cfg, names[0])
             if not icon:
                 self.send_json(404, {"error": "Sem ícone"})
                 return

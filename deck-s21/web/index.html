@@ -276,7 +276,7 @@ function loadIcons() {
     if (!app || iconUrls[app] || iconTried.has(app)) return;
     iconTried.add(app);
     try {
-      const res = await fetch('/api/icon?id=' + encodeURIComponent(b.id), { headers: { 'X-Deck-Token': token } });
+      const res = await fetch('/api/icon?app=' + encodeURIComponent(app), { headers: { 'X-Deck-Token': token } });
       if (!res.ok) throw new Error('sem ícone');
       iconUrls[app] = URL.createObjectURL(await res.blob());
       applyStatus();
