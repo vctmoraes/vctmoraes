@@ -1,0 +1,152 @@
+# Deck S21
+
+O Deck S21 transforma um celular Android em um painel de botões para o MacBook.
+Cada botão executa uma ação no Mac. Exemplos: tocar música, abrir um app, mutar o microfone.
+
+O servidor roda no Mac. O celular só abre uma página web. Não existe app para instalar.
+
+## Como funciona
+
+1. O Mac roda o `server.py`.
+2. O celular abre o endereço do Mac no Chrome.
+3. Você toca em um botão.
+4. O Mac executa a ação.
+
+O celular e o Mac precisam estar na mesma rede Wi-Fi.
+
+## Instalação no Mac
+
+1. Abra o Terminal.
+2. Confira se o Python 3 existe:
+   ```bash
+   python3 --version
+   ```
+   Se o Mac pedir para instalar as "ferramentas de linha de comando", aceite.
+3. Entre na pasta do projeto:
+   ```bash
+   cd deck-s21
+   ```
+4. Inicie o servidor:
+   ```bash
+   python3 server.py
+   ```
+5. Copie o endereço que o servidor mostra. Ele tem este formato:
+   `http://192.168.0.10:8787/?t=CODIGO`
+
+## Configuração do celular
+
+1. Abra o endereço no Chrome do S21.
+2. Toque no botão de tela cheia (canto superior direito).
+3. Gire o celular para o modo paisagem.
+4. Ative **Opções do desenvolvedor → Permanecer ativo**. A tela não apaga durante a carga.
+5. Ative **Proteger bateria** (limite de 85%).
+6. Deixe o celular na tomada.
+
+O código `?t=` fica salvo no celular. Nas próximas vezes, abra só `http://IP:8787/`.
+
+## Permissões do macOS
+
+Na primeira vez, o macOS pede permissões. Clique em **OK** em todas.
+
+| Ação | Permissão |
+|---|---|
+| Música, microfone, volume, apps | **Automação** (Terminal controla Spotify, Música e Eventos do Sistema) |
+| Botões de tecla (Meet, Zoom, captura) | **Acessibilidade** |
+
+Para dar a permissão de Acessibilidade:
+
+1. Abra **Ajustes do Sistema → Privacidade e Segurança → Acessibilidade**.
+2. Ative o **Terminal**.
+
+## Iniciar junto com o Mac
+
+Rode este comando uma vez:
+
+```bash
+./instalar-autostart.sh
+```
+
+O servidor passa a iniciar sozinho. O endereço do celular fica no arquivo `deck.log`.
+
+Para remover:
+
+```bash
+./instalar-autostart.sh remover
+```
+
+Rode o servidor pelo Terminal antes. Assim você aceita as permissões do macOS uma vez.
+
+## Como editar os botões
+
+Abra o arquivo `config.json`. Salve o arquivo e recarregue a página do celular. Não precisa reiniciar o servidor.
+
+Estrutura de um botão:
+
+```json
+{ "label": "Chrome", "icon": "🌐", "action": { "type": "app", "name": "Google Chrome" } }
+```
+
+Campos opcionais do botão:
+
+- `color`: cor de fundo (exemplo `"#1db954"`).
+- `indicator`: faz o botão mudar com o estado do Mac. Valores: `mic_muted`, `sound_muted`, `music_playing`.
+- `icon_on` e `color_on`: ícone e cor quando o indicador está ativo.
+
+No topo do arquivo, o campo `player` define o app de música: `"Spotify"` ou `"Music"`.
+
+## Tipos de ação
+
+| `type` | Campos | O que faz |
+|---|---|---|
+| `app` | `name` | Abre um app. |
+| `url` | `url` | Abre uma página no navegador. |
+| `folder` | `path` | Abre uma pasta no Finder. |
+| `music` | `cmd`: `playpause`, `next`, `previous` | Controla o player. |
+| `volume` | `delta`, `set` ou `mute: "toggle"` | Muda o volume de saída. |
+| `mic` | `mode`: `toggle`, `mute`, `unmute` | Muta o microfone do sistema. |
+| `keys` | `key` ou `code`, `modifiers`, `focus` | Envia uma tecla. `focus` abre o app antes. |
+| `shortcut` | `name` | Executa um atalho do app **Atalhos**. |
+| `applescript` | `script` | Executa um AppleScript. |
+| `shell` | `command` | Executa um comando no terminal. |
+| `new_project` | `base`, `folders`, `open_with`, `date_prefix` | Pede um nome no Mac e cria a pasta do projeto. |
+
+### Botão "Novo projeto"
+
+1. Você toca no botão.
+2. Uma janela aparece **na tela do Mac** e pede o nome.
+3. O Mac cria a pasta `~/Projetos/AAAA-MM-DD-nome`.
+4. O Mac cria as subpastas da lista `folders`.
+5. O Mac abre a pasta no Finder.
+
+Para abrir a pasta em outro app, use `"open_with": "Visual Studio Code"`.
+
+### Mutar o microfone
+
+O botão **Microfone** muta o microfone do sistema inteiro. Funciona em qualquer app.
+
+Os botões **Mutar no Meet** e **Mutar no Zoom** enviam o atalho de teclado do app.
+Eles só funcionam quando a chamada está aberta na janela ativa.
+No Meet, a aba da chamada precisa estar visível no Chrome.
+
+## Segurança
+
+- O servidor aceita pedidos só com o código `?t=`. O código fica no arquivo `.token`.
+- O celular nunca envia comandos. Ele envia só o número do botão. Os comandos ficam no `config.json` do Mac.
+- A conexão usa HTTP simples. Use somente na rede Wi-Fi de casa.
+- Não compartilhe o endereço com o código.
+- Para trocar o código, apague o arquivo `.token` e reinicie o servidor.
+
+## Problemas comuns
+
+**O celular não abre a página.**
+Confira se os dois aparelhos estão na mesma rede Wi-Fi.
+Confira se o Firewall do Mac não bloqueia o Python.
+
+**O endereço mudou.**
+O roteador pode trocar o IP do Mac. No roteador, reserve um IP fixo para o Mac.
+
+**Um botão de tecla não faz nada.**
+Confira a permissão de Acessibilidade para o Terminal.
+
+**A música não aparece no topo.**
+Confira o campo `player` no `config.json`. O app escolhido precisa estar instalado e aberto.

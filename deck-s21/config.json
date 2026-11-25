@@ -1,0 +1,56 @@
+{
+  "port": 8787,
+  "player": "Spotify",
+  "pages": [
+    {
+      "name": "Música",
+      "buttons": [
+        { "label": "Play / Pausa", "icon": "▶️", "icon_on": "⏸️", "color": "#1db954", "indicator": "music_playing", "action": { "type": "music", "cmd": "playpause" } },
+        { "label": "Anterior", "icon": "⏮️", "action": { "type": "music", "cmd": "previous" } },
+        { "label": "Próxima", "icon": "⏭️", "action": { "type": "music", "cmd": "next" } },
+        { "label": "Volume -", "icon": "🔉", "action": { "type": "volume", "delta": -6 } },
+        { "label": "Volume +", "icon": "🔊", "action": { "type": "volume", "delta": 6 } },
+        { "label": "Sem som", "icon": "🔈", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "sound_muted", "action": { "type": "volume", "mute": "toggle" } },
+        { "label": "Abrir Spotify", "icon": "🎧", "action": { "type": "app", "name": "Spotify" } }
+      ]
+    },
+    {
+      "name": "Reunião",
+      "buttons": [
+        { "label": "Microfone", "icon": "🎙️", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "mic_muted", "action": { "type": "mic", "mode": "toggle" } },
+        { "label": "Mutar no Meet", "icon": "📹", "action": { "type": "keys", "key": "d", "modifiers": ["command"], "focus": "Google Chrome" } },
+        { "label": "Mutar no Zoom", "icon": "💬", "action": { "type": "keys", "key": "a", "modifiers": ["command", "shift"], "focus": "zoom.us" } },
+        { "label": "Volume -", "icon": "🔉", "action": { "type": "volume", "delta": -6 } },
+        { "label": "Volume +", "icon": "🔊", "action": { "type": "volume", "delta": 6 } }
+      ]
+    },
+    {
+      "name": "Apps",
+      "buttons": [
+        { "label": "Chrome", "icon": "🌐", "action": { "type": "app", "name": "Google Chrome" } },
+        { "label": "Excel", "icon": "📗", "action": { "type": "app", "name": "Microsoft Excel" } },
+        { "label": "Numbers", "icon": "📊", "action": { "type": "app", "name": "Numbers" } },
+        { "label": "Terminal", "icon": "⌨️", "action": { "type": "app", "name": "Terminal" } },
+        { "label": "Calendário", "icon": "📅", "action": { "type": "app", "name": "Calendar" } },
+        { "label": "Notas", "icon": "📝", "action": { "type": "app", "name": "Notes" } }
+      ]
+    },
+    {
+      "name": "Trabalho",
+      "buttons": [
+        { "label": "Nova planilha", "icon": "➕📊", "color": "#188038", "action": { "type": "url", "url": "https://sheets.new" } },
+        { "label": "Novo doc", "icon": "➕📄", "color": "#1a73e8", "action": { "type": "url", "url": "https://docs.new" } },
+        {
+          "label": "Novo projeto",
+          "icon": "📁",
+          "color": "#7c5cff",
+          "action": { "type": "new_project", "base": "~/Projetos", "folders": ["docs", "dados", "entregas"] }
+        },
+        { "label": "Pasta Projetos", "icon": "🗂️", "action": { "type": "folder", "path": "~/Projetos" } },
+        { "label": "Gmail", "icon": "✉️", "action": { "type": "url", "url": "https://mail.google.com" } },
+        { "label": "Agenda", "icon": "🗓️", "action": { "type": "url", "url": "https://calendar.google.com" } },
+        { "label": "Captura de tela", "icon": "📸", "action": { "type": "keys", "key": "4", "modifiers": ["command", "shift"] } }
+      ]
+    }
+  ]
+}

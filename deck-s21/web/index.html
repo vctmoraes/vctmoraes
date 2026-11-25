@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e0f13">
+<title>Deck</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #181a21; --btn: #22252e; --text: #eceef3; --muted: #8b90a0;
+    --accent: #4c8dff; --ok: #1db954; --err: #e5484d;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; overflow: hidden; }
+  #app { height: 100dvh; display: grid; grid-template-rows: auto 1fr auto;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); min-height: 44px; }
+  #now { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 15px; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  #dot.ok { background: var(--ok); } #dot.bad { background: var(--err); }
+  #full { background: none; border: 0; color: var(--muted); font-size: 20px; padding: 4px 8px; }
+  #grid { display: grid; gap: 12px; padding: 12px; overflow-y: auto;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); grid-auto-rows: 120px; align-content: start; }
+  .btn { --c: var(--btn); background: var(--c); border: 2px solid transparent; border-radius: 20px; color: var(--text);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    font-size: 15px; font-weight: 600; padding: 8px; transition: transform .08s, filter .15s, border-color .15s; }
+  .btn .ic { font-size: 34px; line-height: 1; }
+  .btn:active { transform: scale(.95); filter: brightness(1.25); }
+  .btn.on { background: var(--on, var(--c)); border-color: rgba(255,255,255,.55); }
+  .btn.flash-ok { border-color: var(--ok); } .btn.flash-err { border-color: var(--err); }
+  nav { display: flex; gap: 8px; padding: 8px 12px; background: var(--panel); overflow-x: auto; }
+  nav button { flex: 1; min-width: 90px; background: transparent; border: 0; border-radius: 12px;
+    color: var(--muted); font-size: 15px; font-weight: 600; padding: 12px 8px; }
+  nav button.active { background: var(--btn); color: var(--text); }
+  #toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); max-width: 90vw;
+    background: #000c; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px;
+    opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #toast.show { opacity: 1; } #toast.err { background: var(--err); }
+  #msg { margin: auto; padding: 24px; text-align: center; color: var(--muted); line-height: 1.5; grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span id="dot"></span>
+    <span id="now">Deck</span>
+    <button id="full" aria-label="Tela cheia">⛶</button>
+  </header>
+  <main id="grid"></main>
+  <nav id="tabs"></nav>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+const params = new URLSearchParams(location.search);
+let token = params.get('t') || store.get('deck_token') || '';
+if (params.get('t')) { store.set('deck_token', token); history.replaceState(null, '', location.pathname); }
+
+let config = null, status = {}, page = parseInt(store.get('deck_page') || '0', 10) || 0;
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'X-Deck-Token': token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('Erro ' + res.status));
+  return data;
+}
+
+let toastTimer;
+function toast(text, isErr) {
+  const t = $('toast');
+  t.textContent = text; t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = '', isErr ? 4000 : 1500);
+}
+
+function showMessage(html) { $('grid').innerHTML = '<div id="msg">' + html + '</div>'; $('tabs').innerHTML = ''; }
+
+function render() {
+  if (!config) return;
+  if (page >= config.pages.length) page = 0;
+  const tabs = $('tabs'); tabs.innerHTML = '';
+  config.pages.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.textContent = p.name; b.className = i === page ? 'active' : '';
+    b.onclick = () => { page = i; store.set('deck_page', i); render(); };
+    tabs.appendChild(b);
+  });
+  const grid = $('grid'); grid.innerHTML = '';
+  config.pages[page].buttons.forEach((b) => {
+    const el = document.createElement('button');
+    el.className = 'btn'; el.dataset.id = b.id;
+    if (b.color) el.style.setProperty('--c', b.color);
+    if (b.color_on) el.style.setProperty('--on', b.color_on);
+    el.innerHTML = '<span class="ic"></span><span class="lb"></span>';
+    el.querySelector('.lb').textContent = b.label;
+    el.onclick = () => press(el, b);
+    grid.appendChild(el);
+  });
+  applyStatus();
+}
+
+function isOn(ind) {
+  if (ind === 'mic_muted') return !!status.mic_muted;
+  if (ind === 'sound_muted') return !!status.sound_muted;
+  if (ind === 'music_playing') return status.player && status.player.state === 'playing';
+  return false;
+}
+
+function applyStatus() {
+  if (!config) return;
+  config.pages[page].buttons.forEach((b) => {
+    const el = document.querySelector('.btn[data-id="' + b.id + '"]');
+    if (!el) return;
+    const on = b.indicator ? isOn(b.indicator) : false;
+    el.classList.toggle('on', on);
+    el.querySelector('.ic').textContent = (on && b.icon_on) ? b.icon_on : (b.icon || '');
+  });
+  const p = status.player;
+  $('now').textContent = (p && p.title)
+    ? (p.state === 'playing' ? '▶ ' : '⏸ ') + p.title + (p.artist ? ' — ' + p.artist : '')
+    : 'Deck';
+}
+
+async function press(el, b) {
+  if (navigator.vibrate) navigator.vibrate(15);
+  try {
+    const r = await api('/api/run', { id: b.id });
+    el.classList.add('flash-ok');
+    if (r.message && r.message !== 'OK') toast(r.message);
+    refreshStatus();
+  } catch (e) {
+    el.classList.add('flash-err'); toast(e.message, true);
+  }
+  setTimeout(() => el.classList.remove('flash-ok', 'flash-err'), 400);
+}
+
+async function refreshStatus() {
+  try { status = await api('/api/status'); $('dot').className = 'ok'; applyStatus(); }
+  catch (e) { $('dot').className = 'bad'; }
+}
+
+async function loadConfig() {
+  if (!token) return showMessage('Falta o token.<br>Abra o endereço completo que o servidor mostrou no Mac.');
+  try { config = await api('/api/config'); render(); refreshStatus(); }
+  catch (e) { showMessage('Sem conexão com o Mac.<br><small>' + e.message + '</small>'); $('dot').className = 'bad'; }
+}
+
+$('full').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadConfig(); });
+loadConfig();
+setInterval(() => { if (!document.hidden && config) refreshStatus(); }, 2500);
+</script>
+</body>
+</html>

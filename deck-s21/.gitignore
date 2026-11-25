@@ -1,0 +1,4 @@
+.token
+.state.json
+__pycache__/
+deck.log
