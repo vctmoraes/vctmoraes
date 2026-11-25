@@ -1,0 +1,19 @@
+{
+  "info": {"weather": {"city": "SUA CIDADE"}},
+  "extra_pages": [
+    {
+      "name": "Atalhos",
+      "buttons": [
+        {"label": "Modo trabalho", "icon": "💼", "action": {"type": "shortcut", "name": "Modo trabalho"}},
+        {"label": "Modo foco", "icon": "🎯", "action": {"type": "shortcut", "name": "Modo foco"}}
+      ]
+    },
+    {
+      "name": "Textos",
+      "buttons": [
+        {"label": "Assinatura", "icon": "✍️", "action": {"type": "paste", "text": "Atenciosamente,\nSeu Nome"}},
+        {"label": "Obrigado", "icon": "🙏", "action": {"type": "paste", "text": "Obrigado pelo retorno!"}}
+      ]
+    }
+  ]
+}

@@ -56,6 +56,16 @@
         {"label": "Agenda", "icon": "🗓️", "action": {"type": "url", "url": "https://calendar.google.com"}},
         {"label": "Captura de tela", "icon": "📸", "action": {"type": "keys", "key": "4", "modifiers": ["command", "shift"]}}
       ]
+    },
+    {
+      "name": "Mac",
+      "buttons": [
+        {"label": "Bloquear tela", "icon": "🔒", "action": {"type": "keys", "key": "q", "modifiers": ["control", "command"]}},
+        {"label": "Apagar tela", "icon": "🌙", "action": {"type": "shell", "command": "pmset displaysleepnow"}},
+        {"label": "Proteção de tela", "icon": "🖼️", "action": {"type": "app", "name": "ScreenSaverEngine"}},
+        {"label": "Brilho -", "icon": "🔅", "action": {"type": "keys", "code": 145, "repeat": 2}},
+        {"label": "Brilho +", "icon": "🔆", "action": {"type": "keys", "code": 144, "repeat": 2}}
+      ]
     }
   ]
 }

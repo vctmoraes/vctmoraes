@@ -29,7 +29,7 @@ STATE_PATH = BASE / ".state.json"
 INDEX_PATH = BASE / "web" / "index.html"
 ICON_DIR = BASE / ".icons"
 APP_DIRS = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
-            "/Applications/Utilities", "~/Applications"]
+            "/Applications/Utilities", "/System/Library/CoreServices", "~/Applications"]
 APP_NAME_RE = re.compile(r"^[\w .+&()\-]+$")
 
 LOCK = threading.Lock()
@@ -41,9 +41,9 @@ class ActionError(Exception):
 
 # ---------------------------------------------------------------- utilidades
 
-def run(cmd, timeout=15):
+def run(cmd, timeout=15, stdin=None, env=None):
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=stdin, env=env)
     except FileNotFoundError:
         raise ActionError("Comando '%s' não existe. Este servidor funciona só no macOS." % cmd[0])
     except subprocess.TimeoutExpired:
@@ -135,8 +135,23 @@ def act_keys(a, cfg):
     if a.get("focus"):
         run(["open", "-a", a["focus"]])
         time.sleep(0.4)
-    osa('tell application "System Events" to ' + body + using)
+    times = max(1, min(int(a.get("repeat", 1)), 16))
+    if times == 1:
+        osa('tell application "System Events" to ' + body + using)
+    else:
+        osa('tell application "System Events"\nrepeat %d times\n%s%s\ndelay 0.05\nend repeat\nend tell'
+            % (times, body, using))
     return "Tecla enviada"
+
+
+def act_paste(a, cfg):
+    text = need(a, "text")
+    if len(text) > 20000:
+        raise ActionError("Texto longo demais (máximo 20000 caracteres).")
+    # sem LANG em UTF-8, o pbcopy estraga acentos quando o servidor roda pelo launchd
+    run(["pbcopy"], stdin=text, env=dict(os.environ, LANG="en_US.UTF-8"))
+    act_keys({"key": "v", "modifiers": ["command"], "focus": a.get("focus")}, cfg)
+    return "Texto colado"
 
 
 MUSIC_CMDS = {"playpause": "playpause", "next": "next track", "previous": "previous track"}
@@ -247,6 +262,7 @@ ACTIONS = {
     "applescript": act_applescript,
     "shell": act_shell,
     "keys": act_keys,
+    "paste": act_paste,
     "music": act_music,
     "mic": act_mic,
     "volume": act_volume,
@@ -749,6 +765,9 @@ def load_config():
             deep_merge(cfg, json.loads(LOCAL_CONFIG_PATH.read_text(encoding="utf-8")))
         except (OSError, ValueError) as e:
             raise ConfigError("Erro ao ler config.local.json: %s" % e)
+    extra = cfg.pop("extra_pages", [])  # páginas pessoais do config.local.json
+    if isinstance(extra, list) and isinstance(cfg.get("pages"), list):
+        cfg["pages"] = cfg["pages"] + extra
     pages = cfg.get("pages")
     if not isinstance(pages, list) or not pages:
         raise ConfigError("config.json precisa de uma lista 'pages'.")

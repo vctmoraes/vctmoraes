@@ -114,7 +114,8 @@ No topo do arquivo, o campo `player` define o app de música: `"Spotify"` ou `"M
 | `music` | `cmd`: `playpause`, `next`, `previous` | Controla o player. |
 | `volume` | `delta`, `set` ou `mute: "toggle"` | Muda o volume de saída. |
 | `mic` | `mode`: `toggle`, `mute`, `unmute` | Muta o microfone do sistema. |
-| `keys` | `key` ou `code`, `modifiers`, `focus` | Envia uma tecla. `focus` abre o app antes. |
+| `keys` | `key` ou `code`, `modifiers`, `focus`, `repeat` | Envia uma tecla. `focus` abre o app antes. `repeat` repete a tecla (de 1 a 16 vezes). |
+| `paste` | `text`, `focus` | Cola um texto fixo no app ativo do Mac. O texto substitui o que estava na área de transferência. |
 | `shortcut` | `name` | Executa um atalho do app **Atalhos**. |
 | `applescript` | `script` | Executa um AppleScript. |
 | `shell` | `command` | Executa um comando no terminal. |
@@ -183,6 +184,29 @@ Se o acesso falhar, abra **Ajustes do Sistema → Privacidade e Segurança → C
 ### Desligar um cartão
 
 Em `info`, coloque `"enabled": false` no grupo. Exemplo: `"calendar": {"enabled": false}`.
+
+## Páginas pessoais (atalhos e textos)
+
+O arquivo `config.local.json` pode ter uma lista `extra_pages`. Essas páginas entram depois das páginas do `config.json`.
+Use esse arquivo para dados pessoais, como o texto da sua assinatura. O Git ignora o arquivo.
+
+O arquivo `config.local.example.json` mostra um exemplo com duas páginas: **Atalhos** e **Textos**.
+
+### Como criar um atalho no app Atalhos
+
+1. Abra o app **Atalhos** no Mac.
+2. Clique em **+** para criar um atalho. Dê um nome, por exemplo `Modo trabalho`.
+3. Adicione as ações. Exemplos:
+   - **Modo trabalho:** ação "Abrir app" para cada app que você usa.
+   - **Modo foco:** ação "Definir foco" com o foco "Não Perturbe".
+4. No Terminal, rode `shortcuts list`. O comando mostra os nomes exatos.
+5. Use o nome exato no botão: `{"type": "shortcut", "name": "Modo trabalho"}`.
+
+### Botões de tela e brilho
+
+A página **Mac** tem botões para bloquear a tela, apagar a tela, abrir a proteção de tela e mudar o brilho.
+Os botões de bloqueio, de brilho e de texto enviam teclas. Eles precisam da permissão de **Acessibilidade**.
+Se o brilho não mudar, o código da tecla pode ser diferente no seu Mac. Me avise.
 
 ## Segurança
 
