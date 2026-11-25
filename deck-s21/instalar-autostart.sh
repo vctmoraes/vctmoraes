@@ -22,7 +22,7 @@ cat > "$PLIST" <<PLISTEOF
 <dict>
   <key>Label</key><string>com.deck-s21</string>
   <key>ProgramArguments</key>
-  <array><string>$PY</string><string>$DIR/server.py</string></array>
+  <array><string>$PY</string><string>-u</string><string>$DIR/server.py</string></array>
   <key>WorkingDirectory</key><string>$DIR</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -33,4 +33,9 @@ cat > "$PLIST" <<PLISTEOF
 PLISTEOF
 launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
-echo "Autostart instalado. O endereço do celular está em: $DIR/deck.log"
+sleep 2
+echo "Autostart instalado."
+echo "Endereço e código de pareamento:"
+tail -n 12 "$DIR/deck.log"
+echo
+echo "Para ver de novo: tail -n 12 $DIR/deck.log"
