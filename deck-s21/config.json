@@ -1,17 +1,17 @@
 {
   "port": 8787,
-  "player": "Spotify",
+  "player": "Music",
   "pages": [
     {
       "name": "Música",
       "buttons": [
-        { "label": "Play / Pausa", "icon": "▶️", "icon_on": "⏸️", "color": "#1db954", "indicator": "music_playing", "action": { "type": "music", "cmd": "playpause" } },
+        { "label": "Play / Pausa", "icon": "▶️", "icon_on": "⏸️", "color": "#fa2d48", "indicator": "music_playing", "action": { "type": "music", "cmd": "playpause" } },
         { "label": "Anterior", "icon": "⏮️", "action": { "type": "music", "cmd": "previous" } },
         { "label": "Próxima", "icon": "⏭️", "action": { "type": "music", "cmd": "next" } },
         { "label": "Volume -", "icon": "🔉", "action": { "type": "volume", "delta": -6 } },
         { "label": "Volume +", "icon": "🔊", "action": { "type": "volume", "delta": 6 } },
         { "label": "Sem som", "icon": "🔈", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "sound_muted", "action": { "type": "volume", "mute": "toggle" } },
-        { "label": "Abrir Spotify", "icon": "🎧", "action": { "type": "app", "name": "Spotify" } }
+        { "label": "Abrir Música", "icon": "🎧", "action": { "type": "app", "name": "Music" } }
       ]
     },
     {
