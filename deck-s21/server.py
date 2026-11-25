@@ -687,27 +687,62 @@ def battery_info():
 
 # --- música tocando, com capa
 
-MUSIC_AS = """tell application "Music"
-set st to (player state as text)
-if st is "stopped" then return "stopped"
+# O AppleScript compila só no macOS. Nomes de variável longos evitam choque com termos do app.
+MUSIC_AS = """set stateText to "stopped"
+set trackName to ""
+set trackArtist to ""
+set trackAlbum to ""
+set posSec to 0
+set durSec to 0
 try
-set t to current track
-return st & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round (duration of t)) as text)
-on error e
-return "error" & tab & e
+tell application "Music"
+if player state is playing then
+set stateText to "playing"
+else if player state is paused then
+set stateText to "paused"
+end if
+if stateText is not "stopped" then
+set trackName to name of current track
+set trackArtist to artist of current track
+set trackAlbum to album of current track
+set posSec to player position
+set durSec to duration of current track
+end if
+end tell
+on error errMsg
+return "error" & tab & errMsg
 end try
-end tell"""
+if stateText is "stopped" then return "stopped"
+return stateText & tab & trackName & tab & trackArtist & tab & trackAlbum & tab & ((round posSec) as text) & tab & ((round durSec) as text)"""
 
-SPOTIFY_AS = """tell application "Spotify"
-set st to (player state as text)
-if st is "stopped" then return "stopped"
+SPOTIFY_AS = """set stateText to "stopped"
+set trackName to ""
+set trackArtist to ""
+set trackAlbum to ""
+set trackArt to ""
+set posSec to 0
+set durSec to 0
 try
-set t to current track
-return st & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round ((duration of t) / 1000)) as text) & tab & (artwork url of t)
-on error e
-return "error" & tab & e
+tell application "Spotify"
+if player state is playing then
+set stateText to "playing"
+else if player state is paused then
+set stateText to "paused"
+end if
+if stateText is not "stopped" then
+set trackName to name of current track
+set trackArtist to artist of current track
+set trackAlbum to album of current track
+set trackArt to artwork url of current track
+set posSec to player position
+set durSec to duration of current track
+end if
+end tell
+on error errMsg
+return "error" & tab & errMsg
 end try
-end tell"""
+if stateText is "stopped" then return "stopped"
+return stateText & tab & trackName & tab & trackArtist & tab & trackAlbum & tab & ((round posSec) as text) & tab & ((round (durSec / 1000)) as text) & tab & trackArt"""
 
 ART_DIR = CACHE_DIR / "art"
 ITUNES_URL = "https://itunes.apple.com/search"
