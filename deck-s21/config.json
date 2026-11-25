@@ -38,7 +38,6 @@
       "buttons": [
         {"label": "Chrome", "icon": "🌐", "action": {"type": "app", "name": "Google Chrome"}},
         {"label": "Excel", "icon": "📗", "action": {"type": "app", "name": "Microsoft Excel"}},
-        {"label": "Numbers", "icon": "📊", "action": {"type": "app", "name": "Numbers"}},
         {"label": "Terminal", "icon": "⌨️", "action": {"type": "app", "name": "Terminal"}},
         {"label": "Calendário", "icon": "📅", "action": {"type": "app", "name": "Calendar"}},
         {"label": "Notas", "icon": "📝", "action": {"type": "app", "name": "Notes"}}
