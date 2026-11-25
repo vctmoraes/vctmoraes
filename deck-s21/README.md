@@ -141,14 +141,16 @@ No Meet, a aba da chamada precisa estar visível no Chrome.
 
 ## Tela de informações
 
-A primeira página do Deck (**Info**) mostra quatro cartões:
+O Deck tem duas páginas de informações: **Info** e **Hoje**. Cada página lista os seus cartões em `"cards"` no `config.json`.
 
-| Cartão | O que mostra |
-|---|---|
-| **Agora** | Hora, data e clima. |
-| **Mac** | Uso de CPU e de memória. |
-| **Claude Code** | Sessões abertas e a janela de 5 horas. |
-| **Agenda** | Próximos eventos de hoje e de amanhã. |
+| Página | Cartão | O que mostra |
+|---|---|---|
+| **Info** | **Agora** | Hora, data e clima. |
+| **Info** | **Mac** | CPU, memória, bateria do Mac, espaço livre no disco e bateria do S21. |
+| **Info** | **Claude Code** | Sessões abertas e a janela de 5 horas. |
+| **Info** | **Agenda** | O próximo evento em destaque, com contagem regressiva, e os eventos seguintes. |
+| **Hoje** | **Tocando agora** | Título, artista, álbum, capa e barra de progresso da música. |
+| **Hoje** | **Lembretes** | Lembretes de hoje e atrasados, do app Lembretes. |
 
 Os dados aparecem alguns segundos depois de abrir a página.
 
@@ -181,9 +183,23 @@ Depois, o macOS pede acesso ao **Calendário**. Clique em **OK**.
 
 Se o acesso falhar, abra **Ajustes do Sistema → Privacidade e Segurança → Calendários** e ative o **Terminal**.
 
+### Música com capa
+
+O servidor pede a capa ao app Música. Se o app não tem a capa (músicas só em streaming), o servidor busca a capa na API pública de busca do iTunes. Essa busca envia o artista e o álbum para a Apple.
+Para não enviar, escreva `"online_art": false` em `info → music`.
+
+### Lembretes
+
+Na primeira vez, o servidor compila um programa em Swift. Depois, o macOS pede acesso aos **Lembretes**. Clique em **OK**.
+Se o acesso falhar, abra **Ajustes do Sistema → Privacidade e Segurança → Lembretes** e ative o **Terminal**.
+
+### Bateria do S21
+
+O cartão **Mac** mostra a bateria do S21 só se o Chrome permitir. O Chrome libera essa informação apenas em páginas seguras (https). Como o Deck usa http, a linha **S21** pode não aparecer.
+
 ### Desligar um cartão
 
-Em `info`, coloque `"enabled": false` no grupo. Exemplo: `"calendar": {"enabled": false}`.
+Em `info`, coloque `"enabled": false` no grupo. Exemplo: `"calendar": {"enabled": false}`. Os grupos são `weather`, `system`, `claude`, `calendar`, `music` e `reminders`.
 
 ## Páginas pessoais (atalhos e textos)
 

@@ -4,12 +4,20 @@
   "info": {
     "weather": {"city": ""},
     "claude": {"active_minutes": 30},
-    "calendar": {"enabled": true}
+    "calendar": {"enabled": true},
+    "music": {"online_art": true},
+    "reminders": {"enabled": true}
   },
   "pages": [
     {
       "name": "Info",
-      "type": "info"
+      "type": "info",
+      "cards": ["now", "sys", "claude", "cal"]
+    },
+    {
+      "name": "Hoje",
+      "type": "info",
+      "cards": ["music", "rem"]
     },
     {
       "name": "Música",

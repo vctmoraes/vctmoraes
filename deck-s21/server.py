@@ -5,11 +5,13 @@ Roda no Mac. O celular abre a página em http://IP-DO-MAC:8787 e toca nos botõe
 Só usa a biblioteca padrão do Python 3 (sem pip).
 """
 import hmac
+import hashlib
 import json
 import os
 import plistlib
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -555,8 +557,10 @@ def system_fn(cfg):
              + v.get("Pages wired down", 0) + v.get("Pages occupied by compressor", 0))
     used = max(0, pages * page)
     gib = 1024 ** 3
+    disk = shutil.disk_usage(os.path.expanduser("~"))
     return {"cpu": cpu, "mem_pct": round(100 * used / total), "mem_used": round(used / gib, 1),
-            "mem_total": round(total / gib)}
+            "mem_total": round(total / gib), "battery": battery_info(),
+            "disk_free": round(disk.free / 1e9), "disk_total": round(disk.total / 1e9)}
 
 
 # --- Claude Code (só arquivos locais; nenhum token é lido)
@@ -667,6 +671,232 @@ def claude_window(cfg):
     return {"active": True, "start": start, "end": end, "messages": count, "tokens": tokens}
 
 
+# --- bateria e disco do Mac
+
+def battery_info():
+    try:
+        out = run(["pmset", "-g", "batt"], timeout=5)
+    except ActionError:
+        return None
+    m = re.search(r"(\d+)%;\s*([^;]+);", out)
+    if not m:
+        return None
+    return {"pct": int(m.group(1)), "plugged": "AC Power" in out,
+            "charging": m.group(2).strip() == "charging"}
+
+
+# --- música tocando, com capa
+
+MUSIC_AS = """tell application "Music"
+try
+set t to current track
+return (player state as text) & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round (duration of t)) as text)
+on error
+return "stopped" & tab & tab & tab & tab & "0" & tab & "0"
+end try
+end tell"""
+
+SPOTIFY_AS = """tell application "Spotify"
+try
+set t to current track
+return (player state as text) & tab & (name of t) & tab & (artist of t) & tab & (album of t) & tab & ((round (player position)) as text) & tab & ((round ((duration of t) / 1000)) as text) & tab & (artwork url of t)
+on error
+return "stopped" & tab & tab & tab & tab & "0" & tab & "0"
+end try
+end tell"""
+
+ART_DIR = CACHE_DIR / "art"
+ITUNES_URL = "https://itunes.apple.com/search"
+_art_fail = {}
+
+
+def art_key(album, artist, title):
+    base = "%s|%s" % (album or title, artist)
+    return hashlib.sha1(base.encode("utf-8")).hexdigest()
+
+
+def sniff_image(data):
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] in (b"II*\x00", b"MM\x00*"):
+        return "image/tiff"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def download_bytes(url, timeout=8, limit=3_000_000):
+    if not url.startswith("https://") and not url.startswith("http://127.0.0.1"):
+        raise ActionError("endereço de capa inválido")
+    req = urllib.request.Request(url, headers={"User-Agent": "deck-s21"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = resp.read(limit + 1)
+    if len(data) > limit:
+        raise ActionError("capa grande demais")
+    return data
+
+
+def local_art(path):
+    """Pede a capa ao app Música e grava no arquivo."""
+    osa(
+        'tell application "Music"\n'
+        "set t to current track\n"
+        'if (count of artworks of t) = 0 then error "sem capa"\n'
+        "set d to raw data of artwork 1 of t\n"
+        "end tell\n"
+        "set f to open for access (POSIX file %s) with write permission\n"
+        "try\n"
+        "set eof f to 0\n"
+        "write d to f\n"
+        "close access f\n"
+        "on error e\n"
+        "try\n"
+        "close access f\n"
+        "end try\n"
+        "error e\n"
+        "end try" % q(str(path)), timeout=15)
+
+
+def online_art(cfg, album, artist, title):
+    m = info_cfg(cfg, "music")
+    url = m.get("itunes_url", ITUNES_URL) + "?" + urlencode(
+        {"term": ("%s %s" % (artist, album or title)).strip(), "entity": "album", "limit": 1})
+    found = (http_json(url).get("results") or [None])[0]
+    if not found or not found.get("artworkUrl100"):
+        raise ActionError("capa não encontrada")
+    return download_bytes(found["artworkUrl100"].replace("100x100bb", "600x600bb"))
+
+
+def ensure_art(cfg, player, key, album, artist, title, arturl):
+    ART_DIR.mkdir(parents=True, exist_ok=True)
+    path = ART_DIR / (key + ".img")
+    if path.is_file() and path.stat().st_size > 0:
+        return True
+    failed = _art_fail.get(key)
+    if failed and time.time() - failed < 300:
+        return False
+    errors = []
+    try:
+        if player == "Music":
+            try:
+                local_art(path)
+            except ActionError as e:
+                errors.append(str(e))
+        elif arturl:
+            path.write_bytes(download_bytes(arturl))
+        if (not path.is_file() or path.stat().st_size == 0) and info_cfg(cfg, "music").get("online_art", True):
+            path.write_bytes(online_art(cfg, album, artist, title))
+        if path.is_file() and path.stat().st_size > 0:
+            kind = sniff_image(path.read_bytes()[:16])
+            if kind == "image/tiff":  # o navegador não mostra TIFF
+                tmp = path.with_suffix(".png")
+                run(["sips", "-s", "format", "png", str(path), "--out", str(tmp)], timeout=10)
+                tmp.replace(path)
+            return True
+    except (ActionError, OSError, ValueError) as e:
+        errors.append(str(e))
+    except Exception as e:  # rede fora do ar, JSON ruim etc.
+        errors.append(str(e))
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    _art_fail[key] = time.time()
+    print("[info] capa de '%s': %s" % (title, "; ".join(errors) or "sem capa"), flush=True)
+    return False
+
+
+def music_fn(cfg):
+    player = cfg.get("player", "Spotify")
+    if player not in ("Spotify", "Music"):
+        raise ActionError("O campo 'player' aceita Spotify ou Music.")
+    try:
+        run(["pgrep", "-x", player], timeout=3)
+    except ActionError:
+        return {"state": "off"}
+    out = osa(MUSIC_AS if player == "Music" else SPOTIFY_AS, timeout=10)
+    f = (out.split("\t") + [""] * 7)[:7]
+    state, title, artist, album, pos, dur, arturl = f
+    if state == "stopped" or not title:
+        return {"state": "stopped"}
+    try:
+        pos, dur = int(pos), int(dur)
+    except ValueError:
+        pos = dur = 0
+    key = art_key(album, artist, title)
+    has_art = ensure_art(cfg, player, key, album, artist, title, arturl)
+    return {"state": state, "title": title, "artist": artist, "album": album,
+            "pos": pos, "dur": dur, "art": key if has_art else None}
+
+
+# --- lembretes (EventKit, programa Swift compilado uma vez)
+
+REM_SWIFT = r"""
+import EventKit
+import Foundation
+
+let store = EKEventStore()
+let sem = DispatchSemaphore(value: 0)
+var granted = false
+let done: (Bool, Error?) -> Void = { ok, _ in granted = ok; sem.signal() }
+if #available(macOS 14.0, *) {
+    store.requestFullAccessToReminders(completion: done)
+} else {
+    store.requestAccess(to: .reminder, completion: done)
+}
+_ = sem.wait(timeout: .now() + 30)
+guard granted else {
+    FileHandle.standardError.write("Sem acesso aos Lembretes. Ajustes do Sistema, Privacidade e Seguranca, Lembretes.\n".data(using: .utf8)!)
+    exit(2)
+}
+let cal = Calendar.current
+let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: Date()))!
+let pred = store.predicateForIncompleteReminders(withDueDateStarting: nil, ending: end, calendars: nil)
+let fetched = DispatchSemaphore(value: 0)
+store.fetchReminders(matching: pred) { items in
+    for r in items ?? [] {
+        var due: Date? = nil
+        var hasTime = 0
+        if let c = r.dueDateComponents {
+            due = cal.date(from: c)
+            hasTime = (c.hour != nil) ? 1 : 0
+        }
+        let t = Int(due?.timeIntervalSince1970 ?? 0)
+        let title = (r.title ?? "").replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "\n", with: " ")
+        print("\(t)\t\(hasTime)\t\(title)")
+    }
+    fetched.signal()
+}
+_ = fetched.wait(timeout: .now() + 30)
+"""
+
+
+def reminders_fn(cfg):
+    src_dir = CACHE_DIR / "rem-src"
+    exe = CACHE_DIR / "rem-list"
+    if not exe.is_file():
+        src_dir.mkdir(parents=True, exist_ok=True)
+        (src_dir / "main.swift").write_text(REM_SWIFT, encoding="utf-8")
+        run(["swiftc", "-O", str(src_dir / "main.swift"), "-o", str(exe)], timeout=180)
+    out = run([str(exe)], timeout=60)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    items = []
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        try:
+            due, has_time = float(parts[0]), parts[1] == "1"
+        except ValueError:
+            continue
+        items.append({"due": due or None, "has_time": has_time, "title": parts[2] or "(sem título)",
+                      "overdue": bool(due) and due < today})
+    items.sort(key=lambda i: (not i["overdue"], i["due"] is None, i["due"] or 0))
+    return {"total": len(items), "items": items[:8]}
+
+
 # --- agenda (EventKit, via um programinha em Swift compilado uma vez)
 
 CAL_SWIFT = r"""
@@ -727,12 +957,16 @@ SECTIONS = {
     "claude_sessions": ("claude", Section("sessões do Claude", 5, claude_sessions)),
     "claude_window": ("claude", Section("janela do Claude", 60, claude_window)),
     "calendar": ("calendar", Section("agenda", 120, calendar_fn)),
+    "music": ("music", Section("música", 3, music_fn)),
+    "reminders": ("reminders", Section("lembretes", 120, reminders_fn)),
 }
 
 
-def get_info(cfg):
+def get_info(cfg, wanted=None):
     out = {}
     for name, (group, section) in SECTIONS.items():
+        if wanted is not None and name not in wanted:
+            continue
         if info_cfg(cfg, group).get("enabled", True) is False:
             continue
         out[name] = section.get(cfg, weather_key(cfg) if name == "weather" else None)
@@ -796,7 +1030,7 @@ def public_config(cfg):
 
     return {
         "pages": [
-            {"name": p.get("name", "Página"), "type": p.get("type", "buttons"),
+            {"name": p.get("name", "Página"), "type": p.get("type", "buttons"), "cards": p.get("cards"),
              "buttons": [visual(b) for b in p.get("buttons", [])]}
             for p in cfg["pages"]
         ]
@@ -866,7 +1100,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path not in ("/api/config", "/api/status", "/api/icon", "/api/info"):
+        if path not in ("/api/config", "/api/status", "/api/icon", "/api/info", "/api/art"):
             self.send_json(404, {"error": "Não encontrado"})
             return
         if not self.authorized():
@@ -890,8 +1124,26 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "private, max-age=3600")
             self.end_headers()
             self.wfile.write(body)
+        elif path == "/api/art":
+            key = parse_qs(urlparse(self.path).query).get("k", [""])[0]
+            file = ART_DIR / (key + ".img")
+            if not re.fullmatch(r"[0-9a-f]{40}", key) or not file.is_file():
+                self.send_json(404, {"error": "Sem capa"})
+                return
+            body = file.read_bytes()
+            kind = sniff_image(body[:16])
+            if not kind or kind == "image/tiff":
+                self.send_json(404, {"error": "Formato de capa não suportado"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
         elif path == "/api/info":
-            self.send_json(200, get_info(cfg))
+            wanted = parse_qs(urlparse(self.path).query).get("s")
+            self.send_json(200, get_info(cfg, set(wanted[0].split(",")) if wanted else None))
         elif path == "/api/config":
             self.send_json(200, public_config(cfg))
         else:

@@ -58,6 +58,22 @@
   .sep { height: 1px; background: var(--line); margin: 10px 0 8px; }
   .win { font-size: 14px; margin: 2px 0; }
   .when { display: block; color: var(--muted); font-size: 12px; margin-bottom: 1px; }
+  .cd { font-size: 24px; font-weight: 300; margin: 0 0 4px; }
+  .nxt { font-size: 15px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-top: 8px; }
+  .kv .k { color: var(--label); } .kv .v { color: var(--muted); text-align: right; }
+  .mus { display: flex; gap: 14px; }
+  .art { width: 112px; height: 112px; flex: none; border-radius: 12px; background: var(--btn-hi); display: flex; align-items: center; justify-content: center; font-size: 36px; overflow: hidden; }
+  .art img { width: 100%; height: 100%; object-fit: cover; }
+  .mi { flex: 1; min-width: 0; }
+  .mt { font-size: 17px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ma { color: var(--label); font-size: 14px; margin-top: 2px; }
+  .prog { height: 4px; border-radius: 2px; background: var(--btn-hi); margin-top: 12px; overflow: hidden; }
+  .prog .fill { border-radius: 2px; transition: none; }
+  .times { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .rem { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; }
+  .rem .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rem .dim { margin: 0; font-size: 12px; } .rem.late .dotc { background: var(--err); } .rem.late .dim { color: var(--err); }
   nav { display: flex; gap: 4px; padding: 0 8px; border-top: 1px solid var(--line); overflow-x: auto; }
   nav button { flex: 1; min-width: 90px; background: transparent; border: 0; border-top: 2px solid transparent; margin-top: -1px;
     color: var(--muted); font-size: 14px; font-weight: 500; padding: 14px 8px; }
@@ -132,7 +148,7 @@ function render() {
     tabs.appendChild(b);
   });
   const grid = $('grid');
-  if (config.pages[page].type === 'info') { renderInfoShell(); startInfo(); return; }
+  if (config.pages[page].type === 'info') { renderInfoShell(config.pages[page].cards); startInfo(); return; }
   stopInfo(); grid.className = ''; grid.innerHTML = '';
   config.pages[page].buttons.forEach((b) => {
     const el = document.createElement('button');
@@ -148,7 +164,11 @@ function render() {
 }
 
 // ---------------------------------------------------------------- tela de informações
-let info = null, infoTimer = null, clockTimer = null;
+const CARD_TITLES = { now: 'Agora', sys: 'Mac', claude: 'Claude Code', cal: 'Agenda', music: 'Tocando agora', rem: 'Lembretes' };
+const CARD_SECTIONS = { now: ['weather'], sys: ['system'], claude: ['claude_sessions', 'claude_window'], cal: ['calendar'], music: ['music'], rem: ['reminders'] };
+const DEFAULT_CARDS = ['now', 'sys', 'claude', 'cal'];
+let info = null, infoAt = 0, infoTimer = null, clockTimer = null, infoCards = DEFAULT_CARDS, s21 = null;
+const artUrls = {}, artTried = new Set();
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const pad = (n) => String(n).padStart(2, '0');
 const hhmm = (d) => pad(d.getHours()) + ':' + pad(d.getMinutes());
@@ -156,6 +176,11 @@ const dec = (n) => String(n).replace('.', ',');
 function fmtTokens(n) { return n >= 1e6 ? dec((n / 1e6).toFixed(1)) + ' M' : n >= 1e3 ? Math.round(n / 1e3) + ' mil' : String(n); }
 function fmtSpan(sec) { const m = Math.max(0, Math.round(sec / 60)); return m >= 60 ? Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min' : m + ' min'; }
 function fmtAge(sec) { return sec < 90 ? 'agora' : 'há ' + fmtSpan(sec); }
+function fmtClock(sec) { sec = Math.max(0, Math.floor(sec)); return Math.floor(sec / 60) + ':' + pad(sec % 60); }
+
+if (navigator.getBattery) {   // só existe em páginas seguras (https); no Deck por http pode não aparecer
+  navigator.getBattery().then((b) => { s21 = b; b.addEventListener('levelchange', drawInfo); b.addEventListener('chargingchange', drawInfo); }).catch(() => {});
+}
 
 function makeCard(id, title) {
   const c = el('section', 'card'); c.id = 'c-' + id;
@@ -163,11 +188,14 @@ function makeCard(id, title) {
   return c;
 }
 
-function renderInfoShell() {
+function renderInfoShell(cards) {
+  infoCards = (cards && cards.length) ? cards : DEFAULT_CARDS; info = null;
   const g = $('grid'); g.className = 'info'; g.innerHTML = '';
-  const now = makeCard('now', 'Agora');
-  now.querySelector('.body').append(el('div', 'clock'), el('div', 'date'), el('div', 'wx'));
-  g.append(now, makeCard('sys', 'Mac'), makeCard('claude', 'Claude Code'), makeCard('cal', 'Agenda'));
+  infoCards.forEach((id) => {
+    const c = makeCard(id, CARD_TITLES[id] || id);
+    if (id === 'now') c.querySelector('.body').append(el('div', 'clock'), el('div', 'date'), el('div', 'wx'));
+    g.append(c);
+  });
   updateClock(); drawInfo();
 }
 
@@ -178,10 +206,26 @@ function updateClock() {
   document.querySelector('#c-now .date').textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-// devolve {data} pronto, ou escreve o estado (carregando / erro) e devolve null
+function tickCountdown() {
+  const cd = document.querySelector('.cd'); if (!cd) return;
+  const now = Date.now() / 1000, start = +cd.dataset.start, end = +cd.dataset.end;
+  cd.textContent = now >= start ? 'em andamento · até ' + hhmm(new Date(end * 1000))
+    : start - now < 60 ? 'em menos de 1 min' : 'em ' + fmtSpan(start - now);
+}
+
+let musicNow = null;
+function tickMusic() {
+  const f = document.querySelector('.prog .fill'); if (!f || !musicNow) return;
+  const m = musicNow;
+  const pos = Math.min(m.dur || 0, m.pos + (m.state === 'playing' ? (Date.now() - infoAt) / 1000 : 0));
+  f.style.width = (m.dur ? Math.min(100, 100 * pos / m.dur) : 0) + '%';
+  const t = document.querySelector('.times'); if (t) t.replaceChildren(el('span', null, fmtClock(pos)), el('span', null, fmtClock(m.dur || 0)));
+}
+
+// devolve os dados prontos, ou escreve o estado (carregando / erro) e devolve null
 function ready(box, name) {
   const s = info && info[name];
-  if (!s) { if (!info) box.append(el('div', 'dim', 'carregando…')); else box.append(el('div', 'dim', 'desligado')); return null; }
+  if (!s) { box.append(el('div', 'dim', info ? 'desligado' : 'carregando…')); return null; }
   if (s.data != null) return s.data;
   box.append(el('div', s.error ? 'errtxt' : 'dim', s.error || 'carregando…'));
   return null;
@@ -193,10 +237,21 @@ function bar(label, pct, value) {
   if (pct >= 85) f.classList.add('hot');
   b.append(f); r.append(top, b); return r;
 }
+function kv(k, v) { const r = el('div', 'kv'); r.append(el('span', 'k', k), el('span', 'v', v)); return r; }
+
+function loadArt(key) {
+  if (!key || artUrls[key] || artTried.has(key)) return;
+  artTried.add(key);
+  fetch('/api/art?k=' + encodeURIComponent(key), { headers: { 'X-Deck-Token': token } })
+    .then((r) => { if (!r.ok) throw new Error('sem capa'); return r.blob(); })
+    .then((b) => { artUrls[key] = URL.createObjectURL(b); drawInfo(); })
+    .catch(() => { setTimeout(() => artTried.delete(key), 60000); });
+}
+
+function dayWord(d) { return d.toDateString() === new Date().toDateString() ? '' : 'amanhã '; }
 
 function drawInfo() {
   const draw = (id, fn) => { const box = document.querySelector('#c-' + id + ' .body'); if (!box) return; const nodes = []; fn({ append: (...n) => nodes.push(...n) }); box.replaceChildren(...nodes); };
-  // clima, dentro do cartão "Agora"
   const wx = document.querySelector('#c-now .wx');
   if (wx) {
     const out = []; const w = ready({ append: (...n) => out.push(...n) }, 'weather');
@@ -210,6 +265,10 @@ function drawInfo() {
   draw('sys', (box) => {
     const s = ready(box, 'system'); if (!s) return;
     box.append(bar('CPU', s.cpu, s.cpu + '%'), bar('Memória', s.mem_pct, dec(s.mem_used) + ' de ' + s.mem_total + ' GB'));
+    const b = s.battery;
+    if (b) box.append(kv('Bateria', b.pct + '% · ' + (b.charging ? '⚡ carregando' : b.plugged ? 'na tomada' : 'na bateria')));
+    box.append(kv('Disco', s.disk_free + ' GB livres'));
+    if (s21) box.append(kv('S21', Math.round(s21.level * 100) + '%' + (s21.charging ? ' · ⚡ carregando' : '')));
   });
   draw('claude', (box) => {
     const rows = ready(box, 'claude_sessions');
@@ -222,33 +281,65 @@ function drawInfo() {
     }
     const w = info && info.claude_window && info.claude_window.data;
     if (w) {
-      const hr = el('div', 'sep'); box.append(hr);
+      box.append(el('div', 'sep'));
+      box.append(el('div', 'dim', 'Janela de 5 h'));
       if (w.active) {
-        box.append(el('div', 'dim', 'Janela de 5 h'));
         box.append(el('div', 'win', 'renova às ' + hhmm(new Date(w.end * 1000)) + ' (em ' + fmtSpan(w.end - Date.now() / 1000) + ')'));
         box.append(el('div', 'dim', w.messages + ' msgs · ' + fmtTokens(w.tokens) + ' tokens (estimativa)'));
-      } else { box.append(el('div', 'dim', 'Janela de 5 h')); box.append(el('div', 'win', 'sem uso agora')); }
+      } else box.append(el('div', 'win', 'sem uso agora'));
     }
   });
   draw('cal', (box) => {
     const ev = ready(box, 'calendar'); if (!ev) return;
     if (!ev.length) { box.append(el('div', 'dim', 'Nada marcado para hoje e amanhã')); return; }
-    const today = new Date().toDateString();
-    ev.slice(0, 5).forEach((e) => {
+    const now = Date.now() / 1000;
+    const first = ev.find((e) => !e.all_day && e.end > now);
+    if (first) {
+      const d = new Date(first.start * 1000);
+      const cd = el('div', 'cd'); cd.dataset.start = first.start; cd.dataset.end = first.end;
+      box.append(cd, el('div', 'nxt', first.title), el('div', 'dim', dayWord(d) + hhmm(d) + '–' + hhmm(new Date(first.end * 1000))));
+    }
+    const rest = ev.filter((e) => e !== first).slice(0, first ? 3 : 5);
+    if (first && rest.length) box.append(el('div', 'sep'));
+    rest.forEach((e) => {
       const d = new Date(e.start * 1000);
-      const when = e.all_day ? 'dia todo' : hhmm(d);
-      const day = d.toDateString() === today ? '' : 'amanhã ';
-      const line = el('div', 'evt'); line.append(el('span', 'when', day + when), el('span', 'nm', e.title)); box.append(line);
+      const line = el('div', 'evt'); line.append(el('span', 'when', dayWord(d) + (e.all_day ? 'dia todo' : hhmm(d))), el('span', 'nm', e.title)); box.append(line);
     });
+    tickCountdown();
+  });
+  draw('music', (box) => {
+    const m = ready(box, 'music'); if (!m) return;
+    if (m.state === 'off' || m.state === 'stopped') { musicNow = null; box.append(el('div', 'dim', m.state === 'off' ? 'O app de música está fechado' : 'Nada tocando')); return; }
+    musicNow = m; loadArt(m.art);
+    const wrap = el('div', 'mus'), art = el('div', 'art');
+    if (m.art && artUrls[m.art]) { const im = new Image(); im.src = artUrls[m.art]; im.alt = ''; art.append(im); } else art.textContent = '🎵';
+    const mi = el('div', 'mi');
+    const prog = el('div', 'prog'); prog.append(el('div', 'fill'));
+    mi.append(el('div', 'mt', m.title), el('div', 'ma', m.artist), el('div', 'dim', m.album), prog, el('div', 'times'));
+    wrap.append(art, mi); box.append(wrap);
+    setTimeout(tickMusic, 0);
+  });
+  draw('rem', (box) => {
+    const r = ready(box, 'reminders'); if (!r) return;
+    if (!r.total) { box.append(el('div', 'dim', 'Nenhuma tarefa para hoje')); return; }
+    r.items.slice(0, 6).forEach((i) => {
+      const line = el('div', 'rem' + (i.overdue ? ' late' : ''));
+      line.append(el('span', 'dotc'), el('span', 'nm', i.title), el('span', 'dim', i.overdue ? 'atrasado' : i.has_time ? hhmm(new Date(i.due * 1000)) : 'hoje'));
+      box.append(line);
+    });
+    if (r.total > 6) box.append(el('div', 'dim', '+' + (r.total - 6) + ' tarefas'));
   });
 }
 
 async function fetchInfo() {
   if (document.hidden) return;
-  try { info = await api('/api/info'); $('dot').className = 'ok'; drawInfo(); }
-  catch (e) { $('dot').className = 'bad'; }
+  try {
+    const names = infoCards.flatMap((c) => CARD_SECTIONS[c] || []);
+    info = await api('/api/info?s=' + encodeURIComponent(names.join(',')));
+    infoAt = Date.now(); $('dot').className = 'ok'; drawInfo();
+  } catch (e) { $('dot').className = 'bad'; }
 }
-function startInfo() { stopInfo(); fetchInfo(); infoTimer = setInterval(fetchInfo, 5000); clockTimer = setInterval(() => { updateClock(); }, 1000); }
+function startInfo() { stopInfo(); fetchInfo(); infoTimer = setInterval(fetchInfo, 4000); clockTimer = setInterval(() => { updateClock(); tickCountdown(); tickMusic(); }, 1000); }
 function stopInfo() { clearInterval(infoTimer); clearInterval(clockTimer); infoTimer = clockTimer = null; }
 
 function isOn(ind) {
