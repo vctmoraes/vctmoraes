@@ -6,6 +6,7 @@ Só usa a biblioteca padrão do Python 3 (sem pip).
 """
 import hmac
 import json
+import plistlib
 import re
 import secrets
 import socket
@@ -23,6 +24,10 @@ CONFIG_PATH = BASE / "config.json"
 TOKEN_PATH = BASE / ".token"
 STATE_PATH = BASE / ".state.json"
 INDEX_PATH = BASE / "web" / "index.html"
+ICON_DIR = BASE / ".icons"
+APP_DIRS = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
+            "/Applications/Utilities", "~/Applications"]
+APP_NAME_RE = re.compile(r"^[\w .+&()\-]+$")
 
 LOCK = threading.Lock()
 
@@ -292,6 +297,117 @@ def get_status(cfg):
         return data
 
 
+# ------------------------------------------------------------------- ícones
+
+# Plano B: pede o ícone ao próprio macOS (funciona também com ícones sem arquivo .icns).
+JXA_ICON = """
+ObjC.import('AppKit');
+function run(argv) {
+  var icon = $.NSWorkspace.sharedWorkspace.iconForFile(argv[0]);
+  var dst = $.NSImage.alloc.initWithSize($.NSMakeSize(256, 256));
+  dst.lockFocus;
+  icon.drawInRectFromRectOperationFraction($.NSMakeRect(0, 0, 256, 256), $.NSMakeRect(0, 0, 0, 0), 2, 1.0);
+  dst.unlockFocus;
+  var rep = $.NSBitmapImageRep.imageRepWithData(dst.TIFFRepresentation);
+  var png = rep.representationUsingTypeProperties(4, $());
+  png.writeToFileAtomically(argv[1], true);
+}
+"""
+
+_icon_lock = threading.Lock()
+_icon_fail = {}
+
+
+def icon_app_name(btn):
+    """Nome do app cujo ícone o botão mostra, ou None."""
+    name = btn.get("icon_app")
+    if name is None and btn.get("action", {}).get("type") == "app":
+        name = btn["action"].get("name")
+    if isinstance(name, str) and APP_NAME_RE.match(name):
+        return name
+    return None
+
+
+def find_app(name):
+    for d in APP_DIRS:
+        path = Path(d).expanduser() / (name + ".app")
+        if path.is_dir():
+            return path
+    try:
+        out = run(["mdfind", "kMDItemFSName == '%s.app'" % name], timeout=5)
+    except ActionError:
+        return None
+    for line in out.splitlines():
+        if Path(line).name == name + ".app" and Path(line).is_dir():
+            return Path(line)
+    return None
+
+
+def icns_of(app):
+    res = app / "Contents" / "Resources"
+    try:
+        with open(app / "Contents" / "Info.plist", "rb") as f:
+            info = plistlib.load(f)
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        info = {}
+    for key in ("CFBundleIconFile", "CFBundleIconName"):
+        n = info.get(key)
+        if isinstance(n, str) and n:
+            for cand in (n, n + ".icns"):
+                path = res / cand
+                if path.suffix == ".icns" and path.is_file():
+                    return path
+    found = sorted(res.glob("*.icns"))
+    return found[0] if found else None
+
+
+def make_icon(name):
+    ICON_DIR.mkdir(exist_ok=True)
+    out = ICON_DIR / (re.sub(r"[^\w.-]", "_", name) + ".png")
+    if out.is_file() and out.stat().st_size > 0:
+        return out
+    app = find_app(name)
+    if not app:
+        raise ActionError("app '%s' não encontrado" % name)
+    errors = []
+    try:
+        icns = icns_of(app)
+        if icns:
+            run(["sips", "-s", "format", "png", "-Z", "256", str(icns), "--out", str(out)], timeout=10)
+            if out.is_file() and out.stat().st_size > 0:
+                return out
+        else:
+            errors.append("sem arquivo .icns")
+    except (ActionError, OSError) as e:
+        errors.append("sips: %s" % e)
+    try:
+        run(["osascript", "-l", "JavaScript", "-e", JXA_ICON, str(app), str(out)], timeout=20)
+        if out.is_file() and out.stat().st_size > 0:
+            return out
+        errors.append("osascript não gerou o arquivo")
+    except ActionError as e:
+        errors.append("osascript: %s" % e)
+    raise ActionError("; ".join(errors))
+
+
+def get_icon(cfg, button_id):
+    """Retorna o caminho do PNG do ícone, ou None."""
+    btn = find_button(cfg, button_id)
+    name = icon_app_name(btn) if btn else None
+    if not name:
+        return None
+    with _icon_lock:
+        failed = _icon_fail.get(name)
+        if failed and time.time() - failed < 60:
+            return None
+        try:
+            return make_icon(name)
+        except ActionError as e:
+            _icon_fail[name] = time.time()
+            print("[ícone] %s: %s" % (name, e), flush=True)
+            return None
+
+
 # ------------------------------------------------------------------- config
 
 class ConfigError(Exception):
@@ -320,9 +436,16 @@ def load_config():
 def public_config(cfg):
     """Envia ao celular só o visual. As ações ficam no Mac."""
     keep = ("id", "label", "icon", "icon_on", "color", "color_on", "indicator")
+    def visual(b):
+        out = {k: b[k] for k in keep if k in b}
+        app = icon_app_name(b)
+        if app:
+            out["icon_app"] = app
+        return out
+
     return {
         "pages": [
-            {"name": p.get("name", "Página"), "buttons": [{k: b[k] for k in keep if k in b} for b in p.get("buttons", [])]}
+            {"name": p.get("name", "Página"), "buttons": [visual(b) for b in p.get("buttons", [])]}
             for p in cfg["pages"]
         ]
     }
@@ -391,7 +514,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path not in ("/api/config", "/api/status"):
+        if path not in ("/api/config", "/api/status", "/api/icon"):
             self.send_json(404, {"error": "Não encontrado"})
             return
         if not self.authorized():
@@ -402,7 +525,20 @@ class Handler(BaseHTTPRequestHandler):
         except ConfigError as e:
             self.send_json(500, {"error": str(e)})
             return
-        if path == "/api/config":
+        if path == "/api/icon":
+            ids = parse_qs(urlparse(self.path).query).get("id", [""])
+            icon = get_icon(cfg, ids[0])
+            if not icon:
+                self.send_json(404, {"error": "Sem ícone"})
+                return
+            body = icon.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=3600")
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/api/config":
             self.send_json(200, public_config(cfg))
         else:
             self.send_json(200, get_status(cfg))

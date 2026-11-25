@@ -96,6 +96,11 @@ Campos opcionais do botão:
 - `color`: cor de fundo (exemplo `"#1db954"`).
 - `indicator`: faz o botão mudar com o estado do Mac. Valores: `mic_muted`, `sound_muted`, `music_playing`.
 - `icon_on` e `color_on`: ícone e cor quando o indicador está ativo.
+- `icon_app`: nome de um app. O botão mostra o ícone real desse app, tirado do Mac. Exemplo: `"icon_app": "Finder"`.
+
+Botões do tipo `app` usam o ícone do app automaticamente. Se o servidor não achar o ícone, o botão mostra o emoji do campo `icon`.
+O servidor guarda os ícones na pasta `.icons`. Para atualizar um ícone, apague o arquivo dele nessa pasta.
+Quando um ícone falha, o Terminal do servidor mostra uma linha que começa com `[ícone]`.
 
 No topo do arquivo, o campo `player` define o app de música: `"Spotify"` ou `"Music"`.
 

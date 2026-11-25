@@ -28,7 +28,8 @@
   .btn { --c: var(--accent); background: var(--btn); border: 1px solid var(--line); border-radius: 18px; color: var(--label);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     font-size: 13px; font-weight: 500; padding: 8px; transition: transform .08s, background .15s, border-color .15s; }
-  .btn .ic { font-size: 30px; line-height: 1; }
+  .btn .ic { font-size: 30px; line-height: 1; height: 44px; display: flex; align-items: center; }
+  .btn .ic img { width: 44px; height: 44px; object-fit: contain; }
   .btn:active { transform: scale(.97); background: var(--btn-hi); }
   .btn.on { --a: var(--on, var(--c)); border-color: var(--a); color: var(--text);
     background: color-mix(in srgb, var(--a) 18%, var(--btn)); }
@@ -73,6 +74,7 @@ const params = new URLSearchParams(location.search);
 let token = params.get('t') || store.get('deck_token') || '';
 if (params.get('t')) { store.set('deck_token', token); history.replaceState(null, '', location.pathname); }
 
+const iconUrls = {}, iconTried = new Set();
 let config = null, status = {}, page = parseInt(store.get('deck_page') || '0', 10) || 0;
 
 async function api(path, body) {
@@ -126,6 +128,32 @@ function isOn(ind) {
   return false;
 }
 
+function setIcon(el, b, on) {
+  const ic = el.querySelector('.ic'), url = b.icon_app && iconUrls[b.icon_app];
+  if (url) {
+    if (!ic.firstElementChild || ic.firstElementChild.tagName !== 'IMG') {
+      ic.textContent = '';
+      const im = new Image(); im.src = url; im.alt = ''; ic.appendChild(im);
+    }
+    return;
+  }
+  ic.textContent = (on && b.icon_on) ? b.icon_on : (b.icon || '');
+}
+
+function loadIcons() {
+  config.pages.forEach((pg) => pg.buttons.forEach(async (b) => {
+    const app = b.icon_app;
+    if (!app || iconUrls[app] || iconTried.has(app)) return;
+    iconTried.add(app);
+    try {
+      const res = await fetch('/api/icon?id=' + encodeURIComponent(b.id), { headers: { 'X-Deck-Token': token } });
+      if (!res.ok) throw new Error('sem ícone');
+      iconUrls[app] = URL.createObjectURL(await res.blob());
+      applyStatus();
+    } catch (e) { setTimeout(() => iconTried.delete(app), 60000); }
+  }));
+}
+
 function applyStatus() {
   if (!config) return;
   config.pages[page].buttons.forEach((b) => {
@@ -133,7 +161,7 @@ function applyStatus() {
     if (!el) return;
     const on = b.indicator ? isOn(b.indicator) : false;
     el.classList.toggle('on', on);
-    el.querySelector('.ic').textContent = (on && b.icon_on) ? b.icon_on : (b.icon || '');
+    setIcon(el, b, on);
   });
   const p = status.player;
   $('now').textContent = (p && p.title)
@@ -176,7 +204,7 @@ function showPair(note) {
 
 async function loadConfig() {
   if (!token) return showPair();
-  try { config = await api('/api/config'); render(); refreshStatus(); }
+  try { config = await api('/api/config'); render(); refreshStatus(); loadIcons(); }
   catch (e) {
     if (e.status === 401) { token = ''; store.set('deck_token', ''); return showPair('Pareie de novo.'); }
     showMessage('Sem conexão com o Mac.<br><small>' + e.message + '</small>'); $('dot').className = 'bad';
