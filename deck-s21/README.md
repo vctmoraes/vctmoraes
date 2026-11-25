@@ -30,19 +30,24 @@ O celular e o Mac precisam estar na mesma rede Wi-Fi.
    ```bash
    python3 server.py
    ```
-5. Copie o endereço que o servidor mostra. Ele tem este formato:
-   `http://192.168.0.10:8787/?t=CODIGO`
+5. Anote o endereço e o código de 6 dígitos que o servidor mostra. Exemplo:
+   - Endereço: `http://192.168.0.46:8787/`
+   - Código: `074423`
 
 ## Configuração do celular
 
 1. Abra o endereço no Chrome do S21.
-2. Toque no botão de tela cheia (canto superior direito).
-3. Gire o celular para o modo paisagem.
-4. Ative **Opções do desenvolvedor → Permanecer ativo**. A tela não apaga durante a carga.
-5. Ative **Proteger bateria** (limite de 85%).
-6. Deixe o celular na tomada.
+2. Digite o código de 6 dígitos e toque em **Parear**.
+3. Toque no botão de tela cheia (canto superior direito).
+4. Gire o celular para o modo paisagem.
+5. Ative **Opções do desenvolvedor → Permanecer ativo**. A tela não apaga durante a carga.
+6. Ative **Proteger bateria** (limite de 85%).
+7. Deixe o celular na tomada.
 
-O código `?t=` fica salvo no celular. Nas próximas vezes, abra só `http://IP:8787/`.
+O pareamento acontece uma vez. O celular guarda o acesso. Nas próximas vezes, abra só `http://IP:8787/`.
+
+O código de 6 dígitos muda toda vez que você inicia o servidor. Ele vale por 15 minutos.
+Depois de 5 erros, o servidor bloqueia o pareamento. Reinicie o servidor para gerar um código novo.
 
 ## Permissões do macOS
 
@@ -130,11 +135,12 @@ No Meet, a aba da chamada precisa estar visível no Chrome.
 
 ## Segurança
 
-- O servidor aceita pedidos só com o código `?t=`. O código fica no arquivo `.token`.
+- O servidor aceita pedidos só de aparelhos pareados. O pareamento usa o código de 6 dígitos.
+- Depois do pareamento, o celular guarda um token longo. O token fica no arquivo `.token` do Mac.
 - O celular nunca envia comandos. Ele envia só o número do botão. Os comandos ficam no `config.json` do Mac.
 - A conexão usa HTTP simples. Use somente na rede Wi-Fi de casa.
-- Não compartilhe o endereço com o código.
-- Para trocar o código, apague o arquivo `.token` e reinicie o servidor.
+- Não mostre o código de pareamento a outras pessoas.
+- Para desfazer todos os pareamentos, apague o arquivo `.token` e reinicie o servidor.
 
 ## Problemas comuns
 

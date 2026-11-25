@@ -339,6 +339,26 @@ def find_button(cfg, button_id):
 # --------------------------------------------------------------------- HTTP
 
 TOKEN = ""
+PIN = ""
+PIN_EXPIRES = 0.0
+PIN_FAILS = 0
+PIN_LOCK = threading.Lock()
+PIN_TTL = 15 * 60
+PIN_MAX_FAILS = 5
+
+
+def check_pin(given):
+    """Confere o código de pareamento. Retorna (ok, mensagem de erro)."""
+    global PIN_FAILS
+    with PIN_LOCK:
+        if time.time() > PIN_EXPIRES:
+            return False, "O código expirou. Reinicie o servidor no Mac."
+        if PIN_FAILS >= PIN_MAX_FAILS:
+            return False, "Muitas tentativas erradas. Reinicie o servidor no Mac."
+        if hmac.compare_digest(str(given).encode(), PIN.encode()):
+            return True, ""
+        PIN_FAILS += 1
+        return False, "Código errado."
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -387,8 +407,28 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_json(200, get_status(cfg))
 
+    def handle_pair(self):
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if size > 256:
+                raise ValueError
+            payload = json.loads(self.rfile.read(size) or b"{}")
+        except ValueError:
+            self.send_json(400, {"error": "Pedido inválido"})
+            return
+        pin = payload.get("pin", "") if isinstance(payload, dict) else ""
+        ok, msg = check_pin(pin)
+        if not ok:
+            self.send_json(403, {"error": msg})
+            return
+        self.send_json(200, {"token": TOKEN})
+
     def do_POST(self):
-        if urlparse(self.path).path != "/api/run":
+        path = urlparse(self.path).path
+        if path == "/api/pair":
+            self.handle_pair()
+            return
+        if path != "/api/run":
             self.send_json(404, {"error": "Não encontrado"})
             return
         if not self.authorized():
@@ -453,18 +493,24 @@ def load_token():
 
 
 def main():
-    global TOKEN
+    global TOKEN, PIN, PIN_EXPIRES
     try:
         cfg = load_config()
     except ConfigError as e:
         sys.exit(str(e))
     TOKEN = load_token()
+    PIN = "%06d" % secrets.randbelow(10 ** 6)
+    PIN_EXPIRES = time.time() + PIN_TTL
     host = cfg.get("host", "0.0.0.0")
     port = int(cfg.get("port", 8787))
     server = ThreadingHTTPServer((host, port), Handler)
     server.daemon_threads = True
-    print("Deck S21 rodando. Abra este endereço no celular:\n")
-    print("   http://%s:%d/?t=%s\n" % (lan_ip(), port, TOKEN))
+    ip = lan_ip()
+    print("Deck S21 rodando.\n")
+    print("No celular, abra este endereço no Chrome:")
+    print("   http://%s:%d/\n" % (ip, port))
+    print("Digite este código de pareamento (vale por 15 minutos):")
+    print("   %s\n" % PIN)
     print("Pare com Ctrl+C.")
     try:
         server.serve_forever()
