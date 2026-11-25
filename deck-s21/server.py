@@ -424,6 +424,15 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def lan_ip():
+    # No Mac, o Wi-Fi costuma ser en0. Isso evita mostrar o IP de uma VPN.
+    for iface in ("en0", "en1"):
+        try:
+            ip = subprocess.run(["ipconfig", "getifaddr", iface],
+                                capture_output=True, text=True, timeout=3).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            ip = ""
+        if ip:
+            return ip
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("10.255.255.255", 1))
