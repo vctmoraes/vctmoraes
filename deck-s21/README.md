@@ -153,9 +153,14 @@ Os dados aparecem alguns segundos depois de abrir a página.
 
 ### Clima
 
-1. Abra o `config.json`.
-2. Escreva a sua cidade em `info → weather → city`. Exemplo: `"city": "Niterói"`.
-3. Salve o arquivo. Não precisa reiniciar o servidor.
+1. Crie o arquivo `config.local.json` na pasta do Deck. Use este comando (troque a cidade):
+   ```bash
+   echo '{"info": {"weather": {"city": "Curitiba"}}}' > config.local.json
+   ```
+2. Não precisa reiniciar o servidor.
+
+O arquivo `config.local.json` guarda os seus ajustes pessoais. O Git ignora esse arquivo.
+O servidor mistura o `config.local.json` com o `config.json`. Qualquer campo do `config.json` funciona nele.
 
 O servidor envia o nome da cidade para o serviço gratuito Open-Meteo. Não precisa de conta.
 Para não enviar o nome, use `"latitude"` e `"longitude"` no lugar de `"city"`. O serviço ainda recebe as coordenadas.

@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 BASE = Path(__file__).resolve().parent
 CONFIG_PATH = BASE / "config.json"
+LOCAL_CONFIG_PATH = BASE / "config.local.json"
 TOKEN_PATH = BASE / ".token"
 STATE_PATH = BASE / ".state.json"
 INDEX_PATH = BASE / "web" / "index.html"
@@ -729,11 +730,26 @@ class ConfigError(Exception):
     pass
 
 
+def deep_merge(base, extra):
+    """Mistura 'extra' em 'base'. Dicionários se fundem; o resto é substituído."""
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
 def load_config():
     try:
         cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise ConfigError("Erro ao ler config.json: %s" % e)
+    if LOCAL_CONFIG_PATH.exists():  # ajustes pessoais, fora do Git
+        try:
+            deep_merge(cfg, json.loads(LOCAL_CONFIG_PATH.read_text(encoding="utf-8")))
+        except (OSError, ValueError) as e:
+            raise ConfigError("Erro ao ler config.local.json: %s" % e)
     pages = cfg.get("pages")
     if not isinstance(pages, list) or not pages:
         raise ConfigError("config.json precisa de uma lista 'pages'.")
