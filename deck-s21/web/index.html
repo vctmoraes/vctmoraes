@@ -34,6 +34,30 @@
   .btn.on { --a: var(--on, var(--c)); border-color: var(--a); color: var(--text);
     background: color-mix(in srgb, var(--a) 18%, var(--btn)); }
   .btn.flash-ok { border-color: var(--ok); } .btn.flash-err { border-color: var(--err); }
+  #grid.info { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); grid-auto-rows: auto; align-items: stretch; }
+  .card { background: var(--btn); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; overflow: hidden; min-width: 0; }
+  .card h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .clock { font-size: 44px; font-weight: 300; line-height: 1; letter-spacing: 1px; }
+  .date { margin-top: 6px; color: var(--label); font-size: 14px; }
+  .date::first-letter { text-transform: uppercase; }
+  .wx { margin-top: 10px; }
+  .wxmain { font-size: 16px; line-height: 1.25; }
+  .dim { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .errtxt { color: var(--err); font-size: 13px; }
+  .row { margin: 14px 0 0; }
+  .rowtop { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 14px; }
+  .lbl { color: var(--label); } .val { color: var(--muted); font-size: 12px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--btn-hi); overflow: hidden; }
+  .fill { height: 100%; background: var(--text); border-radius: 4px; transition: width .4s; } .fill.hot { background: var(--err); }
+  .sess { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+  .sess .nm, .evt .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sess .dim { margin: 0; font-size: 12px; }
+  .evt { margin: 8px 0; font-size: 14px; }
+  .evt .nm { display: block; }
+  .dotc { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; } .dotc.work { background: var(--ok); }
+  .sep { height: 1px; background: var(--line); margin: 10px 0 8px; }
+  .win { font-size: 14px; margin: 2px 0; }
+  .when { display: block; color: var(--muted); font-size: 12px; margin-bottom: 1px; }
   nav { display: flex; gap: 4px; padding: 0 8px; border-top: 1px solid var(--line); overflow-x: auto; }
   nav button { flex: 1; min-width: 90px; background: transparent; border: 0; border-top: 2px solid transparent; margin-top: -1px;
     color: var(--muted); font-size: 14px; font-weight: 500; padding: 14px 8px; }
@@ -95,7 +119,7 @@ function toast(text, isErr) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = '', isErr ? 4000 : 1500);
 }
 
-function showMessage(html) { $('grid').innerHTML = '<div id="msg">' + html + '</div>'; $('tabs').innerHTML = ''; }
+function showMessage(html) { stopInfo(); $('grid').className = ''; $('grid').innerHTML = '<div id="msg">' + html + '</div>'; $('tabs').innerHTML = ''; }
 
 function render() {
   if (!config) return;
@@ -107,7 +131,9 @@ function render() {
     b.onclick = () => { page = i; store.set('deck_page', i); render(); };
     tabs.appendChild(b);
   });
-  const grid = $('grid'); grid.innerHTML = '';
+  const grid = $('grid');
+  if (config.pages[page].type === 'info') { renderInfoShell(); startInfo(); return; }
+  stopInfo(); grid.className = ''; grid.innerHTML = '';
   config.pages[page].buttons.forEach((b) => {
     const el = document.createElement('button');
     el.className = 'btn'; el.dataset.id = b.id;
@@ -120,6 +146,110 @@ function render() {
   });
   applyStatus();
 }
+
+// ---------------------------------------------------------------- tela de informações
+let info = null, infoTimer = null, clockTimer = null;
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const pad = (n) => String(n).padStart(2, '0');
+const hhmm = (d) => pad(d.getHours()) + ':' + pad(d.getMinutes());
+const dec = (n) => String(n).replace('.', ',');
+function fmtTokens(n) { return n >= 1e6 ? dec((n / 1e6).toFixed(1)) + ' M' : n >= 1e3 ? Math.round(n / 1e3) + ' mil' : String(n); }
+function fmtSpan(sec) { const m = Math.max(0, Math.round(sec / 60)); return m >= 60 ? Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min' : m + ' min'; }
+function fmtAge(sec) { return sec < 90 ? 'agora' : 'há ' + fmtSpan(sec); }
+
+function makeCard(id, title) {
+  const c = el('section', 'card'); c.id = 'c-' + id;
+  c.append(el('h3', null, title), el('div', 'body'));
+  return c;
+}
+
+function renderInfoShell() {
+  const g = $('grid'); g.className = 'info'; g.innerHTML = '';
+  const now = makeCard('now', 'Agora');
+  now.querySelector('.body').append(el('div', 'clock'), el('div', 'date'), el('div', 'wx'));
+  g.append(now, makeCard('sys', 'Mac'), makeCard('claude', 'Claude Code'), makeCard('cal', 'Agenda'));
+  updateClock(); drawInfo();
+}
+
+function updateClock() {
+  const c = document.querySelector('#c-now .clock'); if (!c) return;
+  const d = new Date();
+  c.textContent = hhmm(d);
+  document.querySelector('#c-now .date').textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+// devolve {data} pronto, ou escreve o estado (carregando / erro) e devolve null
+function ready(box, name) {
+  const s = info && info[name];
+  if (!s) { if (!info) box.append(el('div', 'dim', 'carregando…')); else box.append(el('div', 'dim', 'desligado')); return null; }
+  if (s.data != null) return s.data;
+  box.append(el('div', s.error ? 'errtxt' : 'dim', s.error || 'carregando…'));
+  return null;
+}
+
+function bar(label, pct, value) {
+  const r = el('div', 'row'), top = el('div', 'rowtop'); top.append(el('span', 'lbl', label), el('span', 'val', value));
+  const b = el('div', 'bar'), f = el('div', 'fill'); f.style.width = Math.min(100, pct) + '%';
+  if (pct >= 85) f.classList.add('hot');
+  b.append(f); r.append(top, b); return r;
+}
+
+function drawInfo() {
+  const draw = (id, fn) => { const box = document.querySelector('#c-' + id + ' .body'); if (!box) return; const nodes = []; fn({ append: (...n) => nodes.push(...n) }); box.replaceChildren(...nodes); };
+  // clima, dentro do cartão "Agora"
+  const wx = document.querySelector('#c-now .wx');
+  if (wx) {
+    const out = []; const w = ready({ append: (...n) => out.push(...n) }, 'weather');
+    if (w) {
+      out.push(el('div', 'wxmain', w.icon + ' ' + w.temp + '° ' + w.text));
+      out.push(el('div', 'dim', w.city + ' · máx ' + w.max + '° · mín ' + w.min + '°'));
+      out.push(el('div', 'dim', 'Chance de chuva: ' + w.rain + '%'));
+    }
+    wx.replaceChildren(...out);
+  }
+  draw('sys', (box) => {
+    const s = ready(box, 'system'); if (!s) return;
+    box.append(bar('CPU', s.cpu, s.cpu + '%'), bar('Memória', s.mem_pct, dec(s.mem_used) + ' de ' + s.mem_total + ' GB'));
+  });
+  draw('claude', (box) => {
+    const rows = ready(box, 'claude_sessions');
+    if (rows) {
+      if (!rows.length) box.append(el('div', 'dim', 'Nenhuma sessão ativa'));
+      rows.forEach((r) => {
+        const line = el('div', 'sess'); line.append(el('span', 'dotc' + (r.working ? ' work' : '')), el('span', 'nm', r.project), el('span', 'dim', r.working ? 'trabalhando' : fmtAge(r.age)));
+        box.append(line);
+      });
+    }
+    const w = info && info.claude_window && info.claude_window.data;
+    if (w) {
+      const hr = el('div', 'sep'); box.append(hr);
+      if (w.active) {
+        box.append(el('div', 'dim', 'Janela de 5 h'));
+        box.append(el('div', 'win', 'renova às ' + hhmm(new Date(w.end * 1000)) + ' (em ' + fmtSpan(w.end - Date.now() / 1000) + ')'));
+        box.append(el('div', 'dim', w.messages + ' msgs · ' + fmtTokens(w.tokens) + ' tokens (estimativa)'));
+      } else { box.append(el('div', 'dim', 'Janela de 5 h')); box.append(el('div', 'win', 'sem uso agora')); }
+    }
+  });
+  draw('cal', (box) => {
+    const ev = ready(box, 'calendar'); if (!ev) return;
+    if (!ev.length) { box.append(el('div', 'dim', 'Nada marcado para hoje e amanhã')); return; }
+    const today = new Date().toDateString();
+    ev.slice(0, 5).forEach((e) => {
+      const d = new Date(e.start * 1000);
+      const when = e.all_day ? 'dia todo' : hhmm(d);
+      const day = d.toDateString() === today ? '' : 'amanhã ';
+      const line = el('div', 'evt'); line.append(el('span', 'when', day + when), el('span', 'nm', e.title)); box.append(line);
+    });
+  });
+}
+
+async function fetchInfo() {
+  if (document.hidden) return;
+  try { info = await api('/api/info'); $('dot').className = 'ok'; drawInfo(); }
+  catch (e) { $('dot').className = 'bad'; }
+}
+function startInfo() { stopInfo(); fetchInfo(); infoTimer = setInterval(fetchInfo, 5000); clockTimer = setInterval(() => { updateClock(); }, 1000); }
+function stopInfo() { clearInterval(infoTimer); clearInterval(clockTimer); infoTimer = clockTimer = null; }
 
 function isOn(ind) {
   if (ind === 'mic_muted') return !!status.mic_muted;
@@ -188,7 +318,7 @@ async function refreshStatus() {
 }
 
 function showPair(note) {
-  config = null; $('tabs').innerHTML = '';
+  config = null; stopInfo(); $('grid').className = ''; $('tabs').innerHTML = '';
   $('grid').innerHTML = '<form id="pair"><p>Digite o código de 6 dígitos que o Mac mostra.</p>' +
     '<input id="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" autofocus>' +
     '<button type="submit">Parear</button><div class="err" id="pairErr"></div></form>';

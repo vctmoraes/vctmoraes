@@ -6,6 +6,7 @@ Só usa a biblioteca padrão do Python 3 (sem pip).
 """
 import hmac
 import json
+import os
 import plistlib
 import re
 import secrets
@@ -14,10 +15,11 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+import urllib.request
+from urllib.parse import parse_qs, urlencode, urlparse
 
 BASE = Path(__file__).resolve().parent
 CONFIG_PATH = BASE / "config.json"
@@ -408,6 +410,319 @@ def get_icon(cfg, button_id):
             return None
 
 
+# ------------------------------------------------------------------ informações
+
+CACHE_DIR = BASE / ".cache"
+GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+WINDOW_HOURS = 5
+
+
+class Section:
+    """Dado que se atualiza em segundo plano. O pedido HTTP nunca espera por ele."""
+
+    def __init__(self, name, ttl, fn):
+        self.name, self.ttl, self.fn = name, ttl, fn
+        self.lock = threading.Lock()
+        self.t = 0.0
+        self.key = None
+        self.data = None
+        self.error = None
+        self.busy = False
+
+    def get(self, cfg, key=None):
+        with self.lock:
+            if key != self.key:  # a configuração mudou
+                self.key, self.t, self.data, self.error = key, 0.0, None, None
+            if time.time() - self.t > self.ttl and not self.busy:
+                self.busy = True
+                threading.Thread(target=self._run, args=(cfg, key), daemon=True).start()
+            return {"data": self.data, "error": self.error,
+                    "loading": self.data is None and self.error is None}
+
+    def _run(self, cfg, key):
+        try:
+            data, err = self.fn(cfg), None
+        except Exception as e:  # qualquer falha vira mensagem na tela
+            data, err = None, (str(e) or e.__class__.__name__)
+        with self.lock:
+            if key == self.key:
+                if err is None:
+                    self.data, self.error = data, None
+                    self.t = time.time()
+                else:
+                    if err != self.error:
+                        print("[info] %s: %s" % (self.name, err), flush=True)
+                    self.error = err
+                    self.t = time.time() - (self.ttl - min(self.ttl, 60))  # tenta de novo em 1 min
+            self.busy = False
+
+
+def info_cfg(cfg, name):
+    value = cfg.get("info", {}).get(name, {})
+    return value if isinstance(value, dict) else {}
+
+
+# --- clima (Open-Meteo: gratuito, sem conta)
+
+WMO = [
+    (0, "Céu limpo", "☀️"), (1, "Quase limpo", "🌤️"), (2, "Parcialmente nublado", "⛅"),
+    (3, "Nublado", "☁️"), (45, "Neblina", "🌫️"), (48, "Neblina", "🌫️"),
+    (51, "Garoa", "🌦️"), (53, "Garoa", "🌦️"), (55, "Garoa forte", "🌦️"),
+    (61, "Chuva fraca", "🌧️"), (63, "Chuva", "🌧️"), (65, "Chuva forte", "🌧️"),
+    (71, "Neve", "🌨️"), (73, "Neve", "🌨️"), (75, "Neve forte", "🌨️"),
+    (80, "Pancadas de chuva", "🌦️"), (81, "Pancadas de chuva", "🌦️"), (82, "Pancadas fortes", "⛈️"),
+    (95, "Trovoadas", "⛈️"), (96, "Trovoadas com granizo", "⛈️"), (99, "Trovoadas com granizo", "⛈️"),
+]
+_geo_cache = {}
+
+
+def wmo(code):
+    best = WMO[0]
+    for item in WMO:
+        if item[0] <= code:
+            best = item
+    return best[1], best[2]
+
+
+def http_json(url, timeout=10):
+    req = urllib.request.Request(url, headers={"User-Agent": "deck-s21"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def weather_key(cfg):
+    w = info_cfg(cfg, "weather")
+    return (w.get("city"), w.get("latitude"), w.get("longitude"))
+
+
+def weather_fn(cfg):
+    w = info_cfg(cfg, "weather")
+    lat, lon, label = w.get("latitude"), w.get("longitude"), w.get("city", "")
+    if lat is None or lon is None:
+        if not label:
+            raise ActionError("Defina a cidade no config.json (info, weather, city).")
+        if label not in _geo_cache:
+            g = http_json(w.get("geocode_url", GEO_URL) + "?" + urlencode(
+                {"name": label, "count": 1, "language": "pt", "format": "json"}))
+            found = (g.get("results") or [None])[0]
+            if not found:
+                raise ActionError("Cidade '%s' não encontrada." % label)
+            _geo_cache[label] = (found["latitude"], found["longitude"], found.get("name", label))
+        lat, lon, label = _geo_cache[label]
+    f = http_json(w.get("forecast_url", FORECAST_URL) + "?" + urlencode({
+        "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 1,
+        "current": "temperature_2m,apparent_temperature,weather_code",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max"}))
+    cur, day = f["current"], f["daily"]
+    text, icon = wmo(int(cur["weather_code"]))
+    return {"city": label, "temp": round(cur["temperature_2m"]), "feels": round(cur["apparent_temperature"]),
+            "text": text, "icon": icon, "max": round(day["temperature_2m_max"][0]),
+            "min": round(day["temperature_2m_min"][0]), "rain": day["precipitation_probability_max"][0]}
+
+
+# --- CPU e memória
+
+def system_fn(cfg):
+    out = run(["top", "-l", "2", "-n", "0", "-s", "1"], timeout=15)
+    lines = [l for l in out.splitlines() if l.startswith("CPU usage")]
+    m = re.search(r"([\d.]+)% idle", lines[-1]) if lines else None
+    if not m:
+        raise ActionError("Não consegui ler o uso de CPU.")
+    cpu = max(0, min(100, round(100 - float(m.group(1)))))
+    total = int(run(["sysctl", "-n", "hw.memsize"]))
+    vm = run(["vm_stat"])
+    ps = re.search(r"page size of (\d+) bytes", vm)
+    page = int(ps.group(1)) if ps else 16384
+    v = {k.strip(): int(n) for k, n in re.findall(r"^(.+?):\s+(\d+)\.", vm, re.M)}
+    pages = (v.get("Anonymous pages", 0) - v.get("Pages purgeable", 0)
+             + v.get("Pages wired down", 0) + v.get("Pages occupied by compressor", 0))
+    used = max(0, pages * page)
+    gib = 1024 ** 3
+    return {"cpu": cpu, "mem_pct": round(100 * used / total), "mem_used": round(used / gib, 1),
+            "mem_total": round(total / gib)}
+
+
+# --- Claude Code (só arquivos locais; nenhum token é lido)
+
+def claude_dir(cfg):
+    base = info_cfg(cfg, "claude").get("projects_dir")
+    if not base:
+        base = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude"), "projects")
+    return Path(base).expanduser()
+
+
+def tail_records(path, size=262144):
+    """Registros JSON do fim do arquivo, do mais novo para o mais antigo."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        end = f.tell()
+        start = max(0, end - size)
+        f.seek(start)
+        raw = f.read().decode("utf-8", errors="replace")
+    lines = raw.splitlines()
+    if start > 0 and lines:
+        lines = lines[1:]  # a primeira linha pode estar cortada
+    for line in reversed(lines):
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rec, dict):
+            yield rec
+
+
+def claude_sessions(cfg):
+    base = claude_dir(cfg)
+    if not base.is_dir():
+        raise ActionError("Pasta %s não existe. O Claude Code já rodou neste Mac?" % base)
+    c = info_cfg(cfg, "claude")
+    limit = float(c.get("active_minutes", 30)) * 60
+    now = time.time()
+    newest = {}
+    for f in base.glob("*/*.jsonl"):
+        try:
+            age = now - f.stat().st_mtime
+        except OSError:
+            continue
+        if age > limit:
+            continue
+        cwd = None
+        try:
+            for rec in tail_records(f):
+                if rec.get("cwd"):
+                    cwd = rec["cwd"]
+                    break
+        except OSError:
+            continue
+        name = Path(cwd).name if cwd else f.parent.name.rsplit("-", 1)[-1]
+        if name not in newest or age < newest[name]:
+            newest[name] = age
+    rows = [{"project": n, "age": int(a), "working": a < 45} for n, a in newest.items()]
+    rows.sort(key=lambda r: r["age"])
+    return rows[:5]
+
+
+def claude_window(cfg):
+    """Janela de 5 h do Claude Code, estimada pelos registros locais (sem porcentagem)."""
+    base = claude_dir(cfg)
+    if not base.is_dir():
+        raise ActionError("Pasta %s não existe." % base)
+    now = time.time()
+    horizon = now - (WINDOW_HOURS * 2 + 1) * 3600
+    entries = {}
+    for f in base.glob("*/*.jsonl"):
+        try:
+            if f.stat().st_mtime < horizon:
+                continue
+            fh = open(f, encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                if '"usage"' not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    msg = rec.get("message") or {}
+                    usage, stamp = msg.get("usage"), rec.get("timestamp")
+                    if not isinstance(usage, dict) or not stamp:
+                        continue
+                    t = datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+                    tokens = sum(int(usage.get(k) or 0) for k in
+                                 ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
+                except (ValueError, AttributeError, TypeError):
+                    continue
+                if t < horizon:
+                    continue
+                key = (msg.get("id"), rec.get("requestId")) if msg.get("id") else (str(f), t)
+                entries[key] = (t, tokens)
+    start = end = None
+    count = tokens = 0
+    for t, n in sorted(entries.values()):
+        if start is None or t >= end:
+            start = t - (t % 3600)
+            end = start + WINDOW_HOURS * 3600
+            count = tokens = 0
+        count += 1
+        tokens += n
+    if start is None or now >= end:
+        return {"active": False}
+    return {"active": True, "start": start, "end": end, "messages": count, "tokens": tokens}
+
+
+# --- agenda (EventKit, via um programinha em Swift compilado uma vez)
+
+CAL_SWIFT = r"""
+import EventKit
+import Foundation
+
+let store = EKEventStore()
+let sem = DispatchSemaphore(value: 0)
+var granted = false
+let done: (Bool, Error?) -> Void = { ok, _ in granted = ok; sem.signal() }
+if #available(macOS 14.0, *) {
+    store.requestFullAccessToEvents(completion: done)
+} else {
+    store.requestAccess(to: .event, completion: done)
+}
+_ = sem.wait(timeout: .now() + 30)
+guard granted else {
+    FileHandle.standardError.write("Sem acesso ao Calendario. Ajustes do Sistema, Privacidade e Seguranca, Calendarios.\n".data(using: .utf8)!)
+    exit(2)
+}
+let cal = Calendar.current
+let dayStart = cal.startOfDay(for: Date())
+let end = cal.date(byAdding: .day, value: 2, to: dayStart)!
+let pred = store.predicateForEvents(withStart: dayStart, end: end, calendars: nil)
+for e in store.events(matching: pred).sorted(by: { $0.startDate < $1.startDate }) {
+    let title = (e.title ?? "").replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "\n", with: " ")
+    print("\(Int(e.startDate.timeIntervalSince1970))\t\(Int(e.endDate.timeIntervalSince1970))\t\(e.isAllDay ? 1 : 0)\t\(title)")
+}
+"""
+
+
+def calendar_fn(cfg):
+    CACHE_DIR.mkdir(exist_ok=True)
+    src, exe = CACHE_DIR / "main.swift", CACHE_DIR / "cal-events"
+    if not exe.is_file():
+        src.write_text(CAL_SWIFT, encoding="utf-8")
+        run(["swiftc", "-O", str(src), "-o", str(exe)], timeout=180)
+    out = run([str(exe)], timeout=60)
+    now = time.time()
+    events = []
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 4:
+            continue
+        try:
+            start, end, all_day = float(parts[0]), float(parts[1]), parts[2] == "1"
+        except ValueError:
+            continue
+        if end > now:
+            events.append({"start": start, "end": end, "all_day": all_day, "title": parts[3] or "(sem título)"})
+    events.sort(key=lambda e: e["start"])
+    return events[:6]
+
+
+SECTIONS = {
+    "weather": ("weather", Section("clima", 600, weather_fn)),
+    "system": ("system", Section("sistema", 4, system_fn)),
+    "claude_sessions": ("claude", Section("sessões do Claude", 5, claude_sessions)),
+    "claude_window": ("claude", Section("janela do Claude", 60, claude_window)),
+    "calendar": ("calendar", Section("agenda", 120, calendar_fn)),
+}
+
+
+def get_info(cfg):
+    out = {}
+    for name, (group, section) in SECTIONS.items():
+        if info_cfg(cfg, group).get("enabled", True) is False:
+            continue
+        out[name] = section.get(cfg, weather_key(cfg) if name == "weather" else None)
+    return out
+
+
 # ------------------------------------------------------------------- config
 
 class ConfigError(Exception):
@@ -423,6 +738,8 @@ def load_config():
     if not isinstance(pages, list) or not pages:
         raise ConfigError("config.json precisa de uma lista 'pages'.")
     for i, page in enumerate(pages):
+        if page.get("type") not in (None, "buttons", "info"):
+            raise ConfigError("Página '%s': tipo '%s' não existe." % (page.get("name", i), page.get("type")))
         for j, btn in enumerate(page.get("buttons", [])):
             btn["id"] = "%d-%d" % (i, j)
             kind = btn.get("action", {}).get("type")
@@ -445,7 +762,8 @@ def public_config(cfg):
 
     return {
         "pages": [
-            {"name": p.get("name", "Página"), "buttons": [visual(b) for b in p.get("buttons", [])]}
+            {"name": p.get("name", "Página"), "type": p.get("type", "buttons"),
+             "buttons": [visual(b) for b in p.get("buttons", [])]}
             for p in cfg["pages"]
         ]
     }
@@ -514,7 +832,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path not in ("/api/config", "/api/status", "/api/icon"):
+        if path not in ("/api/config", "/api/status", "/api/icon", "/api/info"):
             self.send_json(404, {"error": "Não encontrado"})
             return
         if not self.authorized():
@@ -538,6 +856,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "private, max-age=3600")
             self.end_headers()
             self.wfile.write(body)
+        elif path == "/api/info":
+            self.send_json(200, get_info(cfg))
         elif path == "/api/config":
             self.send_json(200, public_config(cfg))
         else:

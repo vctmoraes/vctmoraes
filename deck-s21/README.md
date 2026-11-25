@@ -138,6 +138,47 @@ Os botões **Mutar no Meet** e **Mutar no Zoom** enviam o atalho de teclado do a
 Eles só funcionam quando a chamada está aberta na janela ativa.
 No Meet, a aba da chamada precisa estar visível no Chrome.
 
+## Tela de informações
+
+A primeira página do Deck (**Info**) mostra quatro cartões:
+
+| Cartão | O que mostra |
+|---|---|
+| **Agora** | Hora, data e clima. |
+| **Mac** | Uso de CPU e de memória. |
+| **Claude Code** | Sessões abertas e a janela de 5 horas. |
+| **Agenda** | Próximos eventos de hoje e de amanhã. |
+
+Os dados aparecem alguns segundos depois de abrir a página.
+
+### Clima
+
+1. Abra o `config.json`.
+2. Escreva a sua cidade em `info → weather → city`. Exemplo: `"city": "Niterói"`.
+3. Salve o arquivo. Não precisa reiniciar o servidor.
+
+O servidor envia o nome da cidade para o serviço gratuito Open-Meteo. Não precisa de conta.
+Para não enviar o nome, use `"latitude"` e `"longitude"` no lugar de `"city"`. O serviço ainda recebe as coordenadas.
+
+### Claude Code
+
+O servidor lê só arquivos locais da pasta `~/.claude/projects`. Ele não lê token nem senha.
+
+- **Sessões:** o servidor lê o nome da pasta do projeto e a hora da última escrita. Uma sessão com escrita nos últimos 45 segundos aparece como "trabalhando". Sessões sem escrita há mais de 30 minutos somem da lista. Mude esse tempo em `active_minutes`.
+- **Janela de 5 horas:** o servidor soma as mensagens e os tokens do bloco atual de 5 horas. Ele mostra a hora de renovação. O valor é uma **estimativa**. Ele conta só o uso do Claude Code **neste Mac**. O uso no site claude.ai e em outros computadores não entra.
+- O Deck **não mostra a porcentagem do limite do plano**. Não existe forma oficial de ler essa porcentagem.
+
+### Agenda
+
+Na primeira vez, o servidor compila um programa pequeno em Swift (precisa das ferramentas de linha de comando da Apple). Isso leva de 10 a 30 segundos.
+Depois, o macOS pede acesso ao **Calendário**. Clique em **OK**.
+
+Se o acesso falhar, abra **Ajustes do Sistema → Privacidade e Segurança → Calendários** e ative o **Terminal**.
+
+### Desligar um cartão
+
+Em `info`, coloque `"enabled": false` no grupo. Exemplo: `"calendar": {"enabled": false}`.
+
 ## Segurança
 
 - O servidor aceita pedidos só de aparelhos pareados. O pareamento usa o código de 6 dígitos.
