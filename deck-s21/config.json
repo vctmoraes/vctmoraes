@@ -1,6 +1,7 @@
 {
   "port": 8787,
   "player": "Music",
+  "ui": {"button_height": 128, "button_min_width": 150, "icon_size": 46, "labels": true, "background": "", "dim": 0.5},
   "info": {
     "weather": {"city": ""},
     "claude": {"active_minutes": 30},
@@ -22,57 +23,57 @@
     {
       "name": "Música",
       "buttons": [
-        {"label": "Play / Pausa", "icon": "▶️", "icon_on": "⏸️", "color": "#fa2d48", "indicator": "music_playing", "action": {"type": "music", "cmd": "playpause"}},
-        {"label": "Anterior", "icon": "⏮️", "action": {"type": "music", "cmd": "previous"}},
-        {"label": "Próxima", "icon": "⏭️", "action": {"type": "music", "cmd": "next"}},
-        {"label": "Volume -", "icon": "🔉", "action": {"type": "volume", "delta": -6}},
-        {"label": "Volume +", "icon": "🔊", "action": {"type": "volume", "delta": 6}},
-        {"label": "Sem som", "icon": "🔈", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "sound_muted", "action": {"type": "volume", "mute": "toggle"}},
-        {"label": "Abrir Música", "icon": "🎧", "action": {"type": "app", "name": "Music"}}
+        {"label": "Play / Pausa", "symbol": "play", "symbol_on": "pause", "icon": "▶️", "icon_on": "⏸️", "color": "#fa2d48", "indicator": "music_playing", "action": {"type": "music", "cmd": "playpause"}},
+        {"label": "Anterior", "symbol": "skip-back", "icon": "⏮️", "action": {"type": "music", "cmd": "previous"}},
+        {"label": "Próxima", "symbol": "skip-forward", "icon": "⏭️", "action": {"type": "music", "cmd": "next"}},
+        {"label": "Volume -", "symbol": "volume-1", "icon": "🔉", "action": {"type": "volume", "delta": -6}},
+        {"label": "Volume +", "symbol": "volume-2", "icon": "🔊", "action": {"type": "volume", "delta": 6}},
+        {"label": "Sem som", "symbol": "volume", "symbol_on": "volume-x", "icon": "🔈", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "sound_muted", "action": {"type": "volume", "mute": "toggle"}},
+        {"label": "Abrir Música", "symbol": "headphones", "icon": "🎧", "action": {"type": "app", "name": "Music"}}
       ]
     },
     {
       "name": "Reunião",
       "buttons": [
-        {"label": "Microfone", "icon": "🎙️", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "mic_muted", "action": {"type": "mic", "mode": "toggle"}},
-        {"label": "Mutar no Meet", "icon": "📹", "action": {"type": "keys", "key": "d", "modifiers": ["command"], "focus": "Google Chrome"}},
-        {"label": "Mutar no Zoom", "icon": "💬", "action": {"type": "keys", "key": "a", "modifiers": ["command", "shift"], "focus": "zoom.us"}},
-        {"label": "Volume -", "icon": "🔉", "action": {"type": "volume", "delta": -6}},
-        {"label": "Volume +", "icon": "🔊", "action": {"type": "volume", "delta": 6}}
+        {"label": "Microfone", "symbol": "mic", "symbol_on": "mic-off", "icon": "🎙️", "icon_on": "🔇", "color_on": "#e5484d", "indicator": "mic_muted", "action": {"type": "mic", "mode": "toggle"}},
+        {"label": "Mutar no Meet", "symbol": "video", "icon": "📹", "action": {"type": "keys", "key": "d", "modifiers": ["command"], "focus": "Google Chrome"}},
+        {"label": "Mutar no Zoom", "symbol": "users", "icon": "💬", "action": {"type": "keys", "key": "a", "modifiers": ["command", "shift"], "focus": "zoom.us"}},
+        {"label": "Volume -", "symbol": "volume-1", "icon": "🔉", "action": {"type": "volume", "delta": -6}},
+        {"label": "Volume +", "symbol": "volume-2", "icon": "🔊", "action": {"type": "volume", "delta": 6}}
       ]
     },
     {
       "name": "Apps",
       "buttons": [
-        {"label": "Chrome", "icon": "🌐", "action": {"type": "app", "name": "Google Chrome"}},
-        {"label": "Claude", "icon": "✳️", "action": {"type": "app", "name": "Claude"}},
-        {"label": "WhatsApp", "icon": "💬", "action": {"type": "app", "name": "WhatsApp"}},
-        {"label": "Excel", "icon": "📗", "action": {"type": "app", "name": "Microsoft Excel"}},
-        {"label": "Terminal", "icon": "⌨️", "action": {"type": "app", "name": "Terminal"}},
-        {"label": "Calendário", "icon": "📅", "action": {"type": "app", "name": "Calendar"}},
-        {"label": "Notas", "icon": "📝", "action": {"type": "app", "name": "Notes"}}
+        {"label": "Chrome", "symbol": "globe", "icon": "🌐", "action": {"type": "app", "name": "Google Chrome"}},
+        {"label": "Claude", "symbol": "sparkles", "icon": "✳️", "action": {"type": "app", "name": "Claude"}},
+        {"label": "WhatsApp", "symbol": "message-circle", "icon": "💬", "action": {"type": "app", "name": "WhatsApp"}},
+        {"label": "Excel", "symbol": "table", "icon": "📗", "action": {"type": "app", "name": "Microsoft Excel"}},
+        {"label": "Terminal", "symbol": "terminal", "icon": "⌨️", "action": {"type": "app", "name": "Terminal"}},
+        {"label": "Calendário", "symbol": "calendar", "icon": "📅", "action": {"type": "app", "name": "Calendar"}},
+        {"label": "Notas", "symbol": "notebook-pen", "icon": "📝", "action": {"type": "app", "name": "Notes"}}
       ]
     },
     {
       "name": "Trabalho",
       "buttons": [
-        {"label": "Nova planilha", "icon": "➕📊", "color": "#188038", "action": {"type": "url", "url": "https://sheets.new"}},
-        {"label": "Novo doc", "icon": "➕📄", "color": "#1a73e8", "action": {"type": "url", "url": "https://docs.new"}},
-        {"label": "Novo projeto", "icon": "📁", "color": "#7c5cff", "action": {"type": "new_project", "base": "~/Projetos", "folders": ["docs", "dados", "entregas"]}},
-        {"label": "Pasta Projetos", "icon": "🗂️", "action": {"type": "folder", "path": "~/Projetos"}},
-        {"label": "Gmail", "icon": "✉️", "action": {"type": "url", "url": "https://mail.google.com"}},
-        {"label": "Agenda", "icon": "🗓️", "action": {"type": "url", "url": "https://calendar.google.com"}},
-        {"label": "Captura de tela", "icon": "📸", "action": {"type": "keys", "key": "4", "modifiers": ["command", "shift"]}}
+        {"label": "Nova planilha", "symbol": "file-spreadsheet", "icon": "➕📊", "color": "#188038", "action": {"type": "url", "url": "https://sheets.new"}},
+        {"label": "Novo doc", "symbol": "file-text", "icon": "➕📄", "color": "#1a73e8", "action": {"type": "url", "url": "https://docs.new"}},
+        {"label": "Novo projeto", "symbol": "folder-plus", "icon": "📁", "color": "#7c5cff", "action": {"type": "new_project", "base": "~/Projetos", "folders": ["docs", "dados", "entregas"]}},
+        {"label": "Pasta Projetos", "symbol": "folder-open", "icon": "🗂️", "action": {"type": "folder", "path": "~/Projetos"}},
+        {"label": "Gmail", "symbol": "mail", "icon": "✉️", "action": {"type": "url", "url": "https://mail.google.com"}},
+        {"label": "Agenda", "symbol": "calendar-days", "icon": "🗓️", "action": {"type": "url", "url": "https://calendar.google.com"}},
+        {"label": "Captura de tela", "symbol": "camera", "icon": "📸", "action": {"type": "keys", "key": "4", "modifiers": ["command", "shift"]}}
       ]
     },
     {
       "name": "Mac",
       "buttons": [
-        {"label": "Bloquear tela", "icon": "🔒", "action": {"type": "keys", "key": "q", "modifiers": ["control", "command"]}},
-        {"label": "Apagar tela", "icon": "🌙", "action": {"type": "shell", "command": "pmset displaysleepnow"}},
-        {"label": "Proteção de tela", "icon": "🖼️", "action": {"type": "app", "name": "ScreenSaverEngine"}},
-        {"label": "Brilho -", "icon": "🔅", "action": {"type": "keys", "code": 145, "repeat": 2}},
-        {"label": "Brilho +", "icon": "🔆", "action": {"type": "keys", "code": 144, "repeat": 2}}
+        {"label": "Bloquear tela", "symbol": "lock", "icon": "🔒", "action": {"type": "keys", "key": "q", "modifiers": ["control", "command"]}},
+        {"label": "Apagar tela", "symbol": "moon", "icon": "🌙", "action": {"type": "shell", "command": "pmset displaysleepnow"}},
+        {"label": "Proteção de tela", "symbol": "image", "icon": "🖼️", "action": {"type": "app", "name": "ScreenSaverEngine"}},
+        {"label": "Brilho -", "symbol": "sun-dim", "icon": "🔅", "action": {"type": "keys", "code": 145, "repeat": 2}},
+        {"label": "Brilho +", "symbol": "sun", "icon": "🔆", "action": {"type": "keys", "code": 144, "repeat": 2}}
       ]
     }
   ]

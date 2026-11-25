@@ -4,15 +4,15 @@
     {
       "name": "Atalhos",
       "buttons": [
-        {"label": "Modo trabalho", "icon": "💼", "action": {"type": "shortcut", "name": "Modo trabalho"}},
-        {"label": "Modo foco", "icon": "🎯", "action": {"type": "shortcut", "name": "Modo foco"}}
+        {"label": "Modo trabalho", "symbol": "briefcase", "icon": "💼", "action": {"type": "shortcut", "name": "Modo trabalho"}},
+        {"label": "Modo foco", "symbol": "target", "icon": "🎯", "action": {"type": "shortcut", "name": "Modo foco"}}
       ]
     },
     {
       "name": "Textos",
       "buttons": [
-        {"label": "Assinatura", "icon": "✍️", "action": {"type": "paste", "text": "Atenciosamente,\nSeu Nome"}},
-        {"label": "Obrigado", "icon": "🙏", "action": {"type": "paste", "text": "Obrigado pelo retorno!"}}
+        {"label": "Assinatura", "symbol": "pen-line", "icon": "✍️", "action": {"type": "paste", "text": "Atenciosamente,\nSeu Nome"}},
+        {"label": "Obrigado", "symbol": "heart", "icon": "🙏", "action": {"type": "paste", "text": "Obrigado pelo retorno!"}}
       ]
     }
   ]

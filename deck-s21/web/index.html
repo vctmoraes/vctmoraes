@@ -24,12 +24,21 @@
   #dot.ok { background: var(--ok); } #dot.bad { background: var(--err); }
   #full { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 4px 8px; }
   #grid { display: grid; gap: 10px; padding: 14px 16px; overflow-y: auto;
-    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); grid-auto-rows: 112px; align-content: start; }
+    grid-template-columns: repeat(auto-fill, minmax(var(--bw, 150px), 1fr)); grid-auto-rows: var(--bh, 128px); align-content: start; }
   .btn { --c: var(--accent); background: var(--btn); border: 1px solid var(--line); border-radius: 18px; color: var(--label);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     font-size: 13px; font-weight: 500; padding: 8px; transition: transform .08s, background .15s, border-color .15s; }
-  .btn .ic { font-size: 30px; line-height: 1; height: 44px; display: flex; align-items: center; }
-  .btn .ic img { width: 44px; height: 44px; object-fit: contain; }
+  .btn .ic { font-size: calc(var(--ic, 46px) * .7); line-height: 1; height: var(--ic, 46px); display: flex; align-items: center; justify-content: center; }
+  .btn .ic img { width: var(--ic, 46px); height: var(--ic, 46px); object-fit: contain; }
+  .btn .ic .sym { display: block; width: calc(var(--ic, 46px) * .72); height: calc(var(--ic, 46px) * .72); background: var(--text);
+    -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+  .no-labels .btn .lb { display: none; }
+  /* imagem de fundo: o fundo escurece e as superfícies ficam translúcidas */
+  html.has-bg body { background: linear-gradient(rgba(10, 10, 12, var(--dim, .5)), rgba(10, 10, 12, var(--dim, .5))), var(--bg-img);
+    background-size: cover; background-position: center; background-repeat: no-repeat; }
+  html.has-bg { --btn: rgba(24, 25, 30, .58); --btn-hi: rgba(48, 50, 58, .7); --line: rgba(255, 255, 255, .13); }
+  html.has-bg .btn, html.has-bg .card, html.has-bg header, html.has-bg nav { -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  html.has-bg header, html.has-bg nav { background: rgba(10, 10, 12, .35); }
   .btn:active { transform: scale(.97); background: var(--btn-hi); }
   .btn.on { --a: var(--on, var(--c)); border-color: var(--a); color: var(--text);
     background: color-mix(in srgb, var(--a) 18%, var(--btn)); }
@@ -358,6 +367,13 @@ function setIcon(el, b, on) {
     }
     return;
   }
+  const name = (on && b.symbol_on) || b.symbol;   // ícone de linha (Lucide)
+  if (name && /^[a-z0-9-]+$/.test(name)) {
+    let sp = ic.firstElementChild;
+    if (!sp || !sp.classList.contains('sym')) { ic.textContent = ''; sp = document.createElement('span'); sp.className = 'sym'; ic.appendChild(sp); }
+    if (sp.dataset.name !== name) { sp.dataset.name = name; sp.style.setProperty('--m', 'url("/icons/' + name + '.svg")'); }
+    return;
+  }
   ic.textContent = (on && b.icon_on) ? b.icon_on : (b.icon || '');
 }
 
@@ -423,9 +439,40 @@ function showPair(note) {
   };
 }
 
+// ---------------------------------------------------------------- aparência (config.json → ui)
+const BG_PRESETS = {
+  midnight: 'linear-gradient(135deg, #0f2027, #203a43 55%, #2c5364)',
+  aurora: 'radial-gradient(ellipse at 18% 12%, #1d6b5c 0, transparent 55%), radial-gradient(ellipse at 85% 85%, #4b2a7b 0, transparent 55%), #0b1020',
+  sunset: 'linear-gradient(160deg, #2b1055, #7a2e5d 60%, #c4584c)',
+  forest: 'linear-gradient(160deg, #0b1f17, #16402f 60%, #1f5a3c)',
+};
+let bgName = null, bgUrl = null;
+async function applyUi(ui) {
+  ui = ui || {};
+  const root = document.documentElement, st = root.style;
+  const num = (v, d, lo, hi) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+  st.setProperty('--bh', num(ui.button_height, 128, 64, 260) + 'px');
+  st.setProperty('--bw', num(ui.button_min_width, 150, 90, 300) + 'px');
+  st.setProperty('--ic', num(ui.icon_size, 46, 20, 96) + 'px');
+  st.setProperty('--dim', num(ui.dim, 0.5, 0, 0.9));
+  root.classList.toggle('no-labels', ui.labels === false);
+  const bg = String(ui.background || '').trim();
+  if (bg === bgName) return;
+  bgName = bg;
+  if (!bg) { root.classList.remove('has-bg'); return; }
+  if (BG_PRESETS[bg]) { st.setProperty('--bg-img', BG_PRESETS[bg]); root.classList.add('has-bg'); return; }
+  try {
+    const res = await fetch('/api/bg?f=' + encodeURIComponent(bg), { headers: { 'X-Deck-Token': token } });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Erro ' + res.status); }
+    if (bgUrl) URL.revokeObjectURL(bgUrl);
+    bgUrl = URL.createObjectURL(await res.blob());
+    st.setProperty('--bg-img', 'url("' + bgUrl + '")'); root.classList.add('has-bg');
+  } catch (e) { root.classList.remove('has-bg'); bgName = null; toast(e.message, true); }
+}
+
 async function loadConfig() {
   if (!token) return showPair();
-  try { config = await api('/api/config'); render(); refreshStatus(); loadIcons(); }
+  try { config = await api('/api/config'); applyUi(config.ui); render(); refreshStatus(); loadIcons(); }
   catch (e) {
     if (e.status === 401) { token = ''; store.set('deck_token', ''); return showPair('Pareie de novo.'); }
     showMessage('Sem conexão com o Mac.<br><small>' + e.message + '</small>'); $('dot').className = 'bad';

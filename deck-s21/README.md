@@ -139,6 +139,42 @@ Os botões **Mutar no Meet** e **Mutar no Zoom** enviam o atalho de teclado do a
 Eles só funcionam quando a chamada está aberta na janela ativa.
 No Meet, a aba da chamada precisa estar visível no Chrome.
 
+## Aparência
+
+O bloco `ui` do `config.json` controla o tamanho e o fundo. Para os seus ajustes pessoais, use o mesmo bloco no `config.local.json`.
+
+| Campo | O que faz | Padrão |
+|---|---|---|
+| `button_height` | Altura dos botões, em pixels. | `128` |
+| `button_min_width` | Largura mínima dos botões. Menos largura cabe mais botões por linha. | `150` |
+| `icon_size` | Tamanho dos ícones, em pixels. | `46` |
+| `labels` | `false` esconde os textos dos botões. | `true` |
+| `background` | Fundo da tela. Veja abaixo. | vazio |
+| `dim` | Escurece o fundo (de `0` a `0.9`). | `0.5` |
+
+### Ícones de linha
+
+Cada botão pode ter `"symbol": "nome"` (e `"symbol_on"` para o estado ativo). Os ícones vêm do conjunto livre **Lucide** (licença ISC, em `web/icons/LICENSE`).
+O Deck usa o ícone real do app quando o botão abre um app. Se o servidor não achar o app, o botão mostra o ícone de linha. Sem `symbol`, mostra o emoji do campo `icon`.
+
+Para usar um ícone novo:
+1. Escolha o nome em `lucide.dev/icons`.
+2. Baixe o arquivo para a pasta `web/icons`. Exemplo:
+   ```bash
+   curl -o web/icons/rocket.svg https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/rocket.svg
+   ```
+3. Escreva `"symbol": "rocket"` no botão.
+
+### Fundo
+
+- **Fundo pronto:** escreva `"background": "aurora"`. Os nomes são `midnight`, `aurora`, `sunset` e `forest`.
+- **Sua foto:** crie a pasta `backgrounds` dentro do Deck. Coloque a foto nela. Escreva o nome do arquivo: `"background": "foto.jpg"`.
+  Use `.jpg`, `.png` ou `.webp`, com no máximo 8 MB. Para reduzir uma foto no Mac:
+  ```bash
+  sips -Z 1600 backgrounds/foto.jpg
+  ```
+- A pasta `backgrounds` fica fora do Git. Suas fotos não vão para o GitHub.
+
 ## Tela de informações
 
 O Deck tem duas páginas de informações: **Info** e **Hoje**. Cada página lista os seus cartões em `"cards"` no `config.json`.

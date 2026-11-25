@@ -29,6 +29,11 @@ LOCAL_CONFIG_PATH = BASE / "config.local.json"
 TOKEN_PATH = BASE / ".token"
 STATE_PATH = BASE / ".state.json"
 INDEX_PATH = BASE / "web" / "index.html"
+ICONS_DIR = BASE / "web" / "icons"
+BG_DIR = BASE / "backgrounds"
+BG_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+BG_MAX = 8 * 1024 * 1024
+FILE_NAME_RE = re.compile(r"^[\w][\w .\-]*$")
 ICON_DIR = BASE / ".icons"
 APP_DIRS = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
             "/Applications/Utilities", "/System/Library/CoreServices", "~/Applications"]
@@ -1061,7 +1066,7 @@ def load_config():
 
 def public_config(cfg):
     """Envia ao celular só o visual. As ações ficam no Mac."""
-    keep = ("id", "label", "icon", "icon_on", "color", "color_on", "indicator")
+    keep = ("id", "label", "icon", "icon_on", "symbol", "symbol_on", "color", "color_on", "indicator")
     def visual(b):
         out = {k: b[k] for k in keep if k in b}
         app = icon_app_name(b)
@@ -1069,7 +1074,9 @@ def public_config(cfg):
             out["icon_app"] = app
         return out
 
+    ui = cfg.get("ui", {})
     return {
+        "ui": ui if isinstance(ui, dict) else {},
         "pages": [
             {"name": p.get("name", "Página"), "type": p.get("type", "buttons"), "cards": p.get("cards"),
              "buttons": [visual(b) for b in p.get("buttons", [])]}
@@ -1141,7 +1148,21 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path not in ("/api/config", "/api/status", "/api/icon", "/api/info", "/api/art"):
+        if path.startswith("/icons/"):
+            name = path[len("/icons/"):]
+            file = ICONS_DIR / name
+            if not re.fullmatch(r"[a-z0-9\-]+\.svg", name) or not file.is_file():
+                self.send_json(404, {"error": "Não encontrado"})
+                return
+            body = file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path not in ("/api/config", "/api/status", "/api/icon", "/api/info", "/api/art", "/api/bg"):
             self.send_json(404, {"error": "Não encontrado"})
             return
         if not self.authorized():
@@ -1161,6 +1182,23 @@ class Handler(BaseHTTPRequestHandler):
             body = icon.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=3600")
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/api/bg":
+            name = parse_qs(urlparse(self.path).query).get("f", [""])[0]
+            file = BG_DIR / name
+            kind = BG_TYPES.get(file.suffix.lower())
+            if not FILE_NAME_RE.match(name) or not kind or not file.is_file():
+                self.send_json(404, {"error": "Imagem de fundo não encontrada na pasta backgrounds."})
+                return
+            if file.stat().st_size > BG_MAX:
+                self.send_json(413, {"error": "Imagem maior que 8 MB. Reduza com: sips -Z 1600 arquivo.jpg"})
+                return
+            body = file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "private, max-age=3600")
             self.end_headers()
