@@ -37,6 +37,8 @@
       "name": "Apps",
       "buttons": [
         {"label": "Chrome", "icon": "🌐", "action": {"type": "app", "name": "Google Chrome"}},
+        {"label": "Claude", "icon": "✳️", "action": {"type": "app", "name": "Claude"}},
+        {"label": "WhatsApp", "icon": "💬", "action": {"type": "app", "name": "WhatsApp"}},
         {"label": "Excel", "icon": "📗", "action": {"type": "app", "name": "Microsoft Excel"}},
         {"label": "Terminal", "icon": "⌨️", "action": {"type": "app", "name": "Terminal"}},
         {"label": "Calendário", "icon": "📅", "action": {"type": "app", "name": "Calendar"}},
